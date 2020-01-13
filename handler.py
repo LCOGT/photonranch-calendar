@@ -130,14 +130,15 @@ def deleteEventById(event, context):
             }
         )
     except ClientError as e:
+        print(f"error deleting event: {e}")
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
             print(e.response['Error']['Message'])
             return create_403_response("You are not authorized to delete this event.")
         return create_403_response(json.dumps(e))
     
-    else:
-        message = json.dumps(response, indent=4, cls=DecimalEncoder)
-        return create_200_response({"delete_item response": message})
+    message = json.dumps(response, indent=4, cls=DecimalEncoder)
+    print(f"success deleting event, message: {message}")
+    return create_200_response(message)
 
     #except Exception as e: 
         #print(f"Exception: {e}")
