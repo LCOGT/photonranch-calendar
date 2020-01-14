@@ -112,9 +112,20 @@ def deleteEventById(event, context):
 
     print("event")
     print(json.dumps(event))
+
+    # Get the user's roles provided by the lambda authorizer
     userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
     print(f"userMakingThisRequest: {userMakingThisRequest}")
+    userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
+    print(f"userRoles: {userRoles}")
 
+    # Check if the requester is an admin
+    requesterIsAdmin="false"
+    if 'admin' in userRoles:
+        requesterIsAdmin="true"
+    print(f"requesterIsAdmin: {requesterIsAdmin}")
+
+    # Specify the event with our pk (eventToDelete) and sk (startTime)
     eventToDelete = event_body['event_id']
     startTime = event_body['start']
 
@@ -124,9 +135,11 @@ def deleteEventById(event, context):
                 'event_id': eventToDelete,
                 'start': startTime
             },
-            ConditionExpression="creator_id = :user_id",
+            ConditionExpression=":requesterIsAdmin = :true OR creator_id = :requester_id",
             ExpressionAttributeValues = {
-                ":user_id": userMakingThisRequest, 
+                ":requester_id": userMakingThisRequest, 
+                ":requesterIsAdmin": requesterIsAdmin,
+                ":true": "true"
             }
         )
     except ClientError as e:
@@ -134,15 +147,11 @@ def deleteEventById(event, context):
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
             print(e.response['Error']['Message'])
             return create_403_response("You are not authorized to delete this event.")
-        return create_403_response(json.dumps(e))
+        return create_403_response(e.response['Error']['Message'])
     
     message = json.dumps(response, indent=4, cls=DecimalEncoder)
     print(f"success deleting event, message: {message}")
     return create_200_response(message)
-
-    #except Exception as e: 
-        #print(f"Exception: {e}")
-        #return create_200_response(json.dumps(e))
 
 
 def getWMDEvents(event, context):
