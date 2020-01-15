@@ -2,7 +2,9 @@
   "name": "calendar-backend",
   "description": "",
   "version": "0.1.0",
-  "dependencies": {},
+  "dependencies": {
+    "serverless-dynamodb-pitr": "^0.1.1"
+  },
   "devDependencies": {
     "serverless-python-requirements": "^5.0.1"
   }
