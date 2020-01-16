@@ -161,23 +161,26 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  #modifyEvent:
-    #handler: handler.modifyEvent
-    #events:
-      #- http:
-          #path: modifyevent 
-          #method: post 
-          #cors:
-            #origin: '*'
-            #headers:
-              #- Content-Type
-              #- X-Amz-Date
-              #- Authorization
-              #- X-Api-Key
-              #- X-Amz-Security-Token
-              #- X-Amz-User-Agent
-              #- Access-Control-Allow-Origin
-              #- Access-Control-Allow-Credentials
+  modifyEvent:
+    handler: handler.modifyEvent
+    events:
+      - http:
+          path: modifyevent 
+          method: post 
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
   getSiteEventsInDateRange:
     handler: handler.getSiteEventsInDateRange
     events:

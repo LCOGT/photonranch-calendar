@@ -48,8 +48,28 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
+def getEvent(eventId, eventStart):
+
+    print(f'eventId: {eventId}')
+    print(f'eventStart: {eventStart}')
+    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    try: 
+        response = table.get_item(
+            Key={
+                'event_id': eventId,
+                'start': eventStart,
+            }
+        )
+        print(f"getEvent response: {response}")
+        return response['Item']
+    except Exception as e:
+        print(f"error with getEvent")
+        print(e)
+    return ''
+        
+
 #=========================================#
-#=======       API Functions      ========#
+#=======       API Endpoints      ========#
 #=========================================#
 
 def addNewEvent(event, context):
@@ -88,18 +108,46 @@ def addNewEvent(event, context):
         print(f"Exception: {e}")
         return create_200_response(json.dumps(e))
 
-#def modifyEvent(event, context):
-    #event_body = json.loads(event.get("body", ""))
-    #table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+def modifyEvent(event, context):
+    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    event_body = json.loads(event.get("body", ""))
 
-    ## If the start time is new, we need to delete and recreate the item
-    ## (since start time is the sort key for our table)
+    originalEvent = event_body['originalEvent']
+    modifiedEvent = event_body['modifiedEvent']
 
-    ## If the start time has not changed, a simple update will work.
+    originalId =  originalEvent['event_id']
+    originalStart = originalEvent['start']
+    modifiedStart = modifiedEvent['start']
+
+    # Make sure the user is admin, or modifying their own event
+    creatorId = getEvent(originalId, originalStart)['creator_id']
+    userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
+    userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
+    if creatorId != userMakingThisRequest and 'admin' not in userRoles:
+        return create_403_response("You may only modify your own events.")
+
+    # If the start time is new, we need to delete and recreate the item
+    # (since start time is the sort key for our table)
+    #if originalStart != modifiedStart:
+    delRes = table.delete_item(
+        Key={
+            'event_id': originalId,
+            'start': originalStart,
+        }
+    )
+    print(f"delete response: {delRes}")
+    # Ensure the eventId and creator do not change
+    modifiedEvent['event_id'] = originalId
+    modifiedEvent['creator_id'] = creatorId
+    response = table.put_item(Item=modifiedEvent)
+    print(f"put response: {response}")
+    return create_200_response(json.dumps(response))
+
+    # If the start time has not changed, a simple update will work.
     #response = table.update_item(
         #Key={
-            #'event_id': '',
-            #'start': ''
+            #'event_id': originalId,
+            #'start': originalStart,
         #},
         #UpdateExpression="set "
     #)
@@ -146,7 +194,7 @@ def deleteEventById(event, context):
         print(f"error deleting event: {e}")
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
             print(e.response['Error']['Message'])
-            return create_403_response("You are not authorized to delete this event.")
+            return create_403_response("You may only modify your own events.")
         return create_403_response(e.response['Error']['Message'])
     
     message = json.dumps(response, indent=4, cls=DecimalEncoder)
