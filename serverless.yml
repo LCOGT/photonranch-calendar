@@ -94,6 +94,8 @@ resources: # CloudFormation template syntax from here on.
             AttributeType: S
           - AttributeName: start
             AttributeType: S
+          - AttributeName: end
+            AttributeType: S
           - AttributeName: site
             AttributeType: S
         KeySchema:
@@ -102,11 +104,22 @@ resources: # CloudFormation template syntax from here on.
           - AttributeName: start
             KeyType: RANGE
         GlobalSecondaryIndexes:
-          - IndexName: site_events
+          #- IndexName: site_starttime
+            #KeySchema:
+              #- AttributeName: site
+                #KeyType: HASH
+              #- AttributeName: start
+                #KeyType: RANGE
+            #Projection:
+              #ProjectionType: ALL
+            #ProvisionedThroughput:
+              #ReadCapacityUnits: 1
+              #WriteCapacityUnits: 1
+          - IndexName: site-end-index
             KeySchema:
               - AttributeName: site
                 KeyType: HASH
-              - AttributeName: start
+              - AttributeName: end
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
@@ -198,10 +211,37 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  getWMDEvents:
-    handler: handler.getWMDEvents
+  getEventAtTime:
+    handler: handler.getEventAtTime
     events:
       - http:
-          path: getwmd 
-          method: get
-          cors: true
+          path: get-event-at-time
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  isUserScheduled:
+    handler: handler.isUserScheduled
+    events:
+      - http:
+          path: is-user-scheduled
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials

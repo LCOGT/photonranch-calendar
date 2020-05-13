@@ -8,6 +8,8 @@ from botocore.exceptions import ClientError
 
 dynamodb = boto3.resource('dynamodb')
 
+calendar_table_name = os.environ['DYNAMODB_CALENDAR']
+
 
 #=========================================#
 #=======     Helper Functions     ========#
@@ -52,7 +54,7 @@ def getEvent(eventId, eventStart):
 
     print(f'eventId: {eventId}')
     print(f'eventStart: {eventStart}')
-    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    table = dynamodb.Table(calendar_table_name)
     try: 
         response = table.get_item(
             Key={
@@ -67,6 +69,21 @@ def getEvent(eventId, eventStart):
         print(e)
     return ''
         
+def getEventsDuringTime(time, site):
+    ''' 
+    Get any calendar events at a site that are active during the given time 
+    '''
+    table = dynamodb.Table(calendar_table_name)
+    #table = dynamodb.Table('photonranch-calendar')
+    response = table.query(
+        IndexName="site-end-index",
+        KeyConditionExpression=
+                Key('site').eq(site)
+                & Key('end').gte(time),
+        FilterExpression=Key('start').lte(time)
+    )
+    print(f"Items during {time}: {response['Items']}")
+    return response['Items']
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -76,7 +93,7 @@ def addNewEvent(event, context):
     
     try:
         event_body = json.loads(event.get("body", ""))
-        table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+        table = dynamodb.Table(calendar_table_name)
 
         print("event_body:")
         print(event_body)
@@ -109,7 +126,7 @@ def addNewEvent(event, context):
         return create_200_response(json.dumps(e))
 
 def modifyEvent(event, context):
-    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    table = dynamodb.Table(calendar_table_name)
     event_body = json.loads(event.get("body", ""))
 
     originalEvent = event_body['originalEvent']
@@ -143,20 +160,10 @@ def modifyEvent(event, context):
     print(f"put response: {response}")
     return create_200_response(json.dumps(response))
 
-    # If the start time has not changed, a simple update will work.
-    #response = table.update_item(
-        #Key={
-            #'event_id': originalId,
-            #'start': originalStart,
-        #},
-        #UpdateExpression="set "
-    #)
-
-
 def deleteEventById(event, context):
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    table = dynamodb.Table(calendar_table_name)
 
     print("event")
     print(json.dumps(event))
@@ -202,23 +209,10 @@ def deleteEventById(event, context):
     return create_200_response(message)
 
 
-def getWMDEvents(event, context):
-    
-    site = "wmd"
-    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
-
-    res = table.query(
-        IndexName="site_events",
-        KeyConditionExpression=Key('site').eq(site)
-    )
-
-    message = json.dumps({'results':res})
-    return create_200_response(message)
-
 def getSiteEventsInDateRange(event, context):
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_CALENDAR'])
+    table = dynamodb.Table(calendar_table_name)
 
     # Check that all required keys are present.
     required_keys = ['site', 'start', 'end']
@@ -240,8 +234,8 @@ def getSiteEventsInDateRange(event, context):
     site = event_body['site']
 
     table_response = table.query(
-        IndexName="site_events",
-        KeyConditionExpression=Key('site').eq(site) & Key('start').between(start_date, end_date)
+        IndexName="site-end-index",
+        KeyConditionExpression=Key('site').eq(site) & Key('end').between(start_date, end_date)
     )
 
     message = json.dumps({
@@ -251,8 +245,69 @@ def getSiteEventsInDateRange(event, context):
 
     return create_200_response(message)
 
+def getEventAtTime(event, context):
+    '''
+    Return events that are happening at a give point in time
+    Args: 
+        event.body.time: UTC datestring (eg. '2020-05-14T17:30:00Z')
+        event.body.site: sitecode (eg. 'wmd')
+    Return:
+        list of event objects
+    '''
+    event_body = json.loads(event.get("body", ""))
+    table = dynamodb.Table(calendar_table_name)
+    print("event body:")
+    print(event_body)
+
+    time = event_body["time"]
+    site = event_body["site"]
+    events = getEventsDuringTime(time, site)
+    return create_200_response(json.dumps(events))
+        
+def isUserScheduled(event, context):
+    '''
+    Check if a user has a calendar event for a specific site and time.
+    Args: 
+        event.body.user_id: auth0 user 'sub' (eg. "google-oauth2|xxxxxxxxxxxxx")
+        event.body.site: site code (eg. "wmd")
+        event.body.time: UTC datestring (eg. '2020-05-14T17:30:00Z')
+    '''
+    event_body = json.loads(event.get("body", ""))
+    print("event body:")
+    print(event_body)
+
+    table = dynamodb.Table(calendar_table_name)
+
+    user = event_body["user_id"]
+    site = event_body["site"]
+    time = event_body["time"]
+
+    events = getEventsDuringTime(time, site)
+    allowed_users = [event["creator_id"] for event in events]
+    print(f"Allowed users: {allowed_users}")
+    return create_200_response(user in allowed_users)
 
 
+
+
+
+if __name__=="__main__":
+
+    calendar_table_name = "photonranch-calendar"
+
+    time = "2020-05-12T16:40:00Z" # This should be during 'cool cave' at ALI-sim
+    site = "ALI-sim"
+    user_id = "google-oauth2|100354044221813550027"
+
+    event = {
+        "body": json.dumps({
+            "user_id": user_id,
+            "site": site,
+            "time": time
+        })
+    }
+
+    print(isUserScheduled(event, {}))
 
 
 
