@@ -98,23 +98,25 @@ resources: # CloudFormation template syntax from here on.
             AttributeType: S
           - AttributeName: site
             AttributeType: S
+          - AttributeName: creator_id
+            AttributeType: S
         KeySchema:
           - AttributeName: event_id
             KeyType: HASH
           - AttributeName: start
             KeyType: RANGE
         GlobalSecondaryIndexes:
-          #- IndexName: site_starttime
-            #KeySchema:
-              #- AttributeName: site
-                #KeyType: HASH
-              #- AttributeName: start
-                #KeyType: RANGE
-            #Projection:
-              #ProjectionType: ALL
-            #ProvisionedThroughput:
-              #ReadCapacityUnits: 1
-              #WriteCapacityUnits: 1
+          - IndexName: creatorid-end-index
+            KeySchema:
+              - AttributeName: creator_id
+                KeyType: HASH
+              - AttributeName: end
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
           - IndexName: site-end-index
             KeySchema:
               - AttributeName: site
@@ -228,11 +230,45 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
+  getUserEventsEndingAfterTime:
+    handler: handler.getUserEventsEndingAfterTime
+    events:
+      - http:
+          path: user-events-ending-after-time
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
   isUserScheduled:
     handler: handler.isUserScheduled
     events:
       - http:
           path: is-user-scheduled
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  doesConflictingEventExist:
+    handler: handler.doesConflictingEventExist
+    events:
+      - http:
+          path: does-conflicting-event-exist
           method: post
           cors:
             origin: '*'

@@ -50,6 +50,8 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
+
+
 def getEvent(eventId, eventStart):
 
     print(f'eventId: {eventId}')
@@ -72,6 +74,8 @@ def getEvent(eventId, eventStart):
 def getEventsDuringTime(time, site):
     ''' 
     Get any calendar events at a site that are active during the given time 
+    Args:
+        time: UTC datestring (eg. '2020-05-14T17:30:00Z')
     '''
     table = dynamodb.Table(calendar_table_name)
     #table = dynamodb.Table('photonranch-calendar')
@@ -84,6 +88,27 @@ def getEventsDuringTime(time, site):
     )
     print(f"Items during {time}: {response['Items']}")
     return response['Items']
+
+def getUserEventsEndingAfterTimeHelper(user_id: str, time: str) -> list:
+    ''' 
+    Get any calendar events created by a user ending after the given time.
+    Args:
+        user_id: auth0 'sub' parameter (eg. "google-oauth2|100354044239485750027")
+        time: UTC datestring (eg. '2020-05-14T17:30:00Z')
+    Returns:
+        list of events
+    '''
+    table = dynamodb.Table(calendar_table_name)
+    #table = dynamodb.Table('photonranch-calendar')
+    response = table.query(
+        IndexName="creatorid-end-index",
+        KeyConditionExpression=
+                Key('creator_id').eq(user_id)
+                & Key('end').gte(time)
+    )
+    print(f"Items ending after {time}: {response['Items']}")
+    return response['Items']
+
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -245,6 +270,22 @@ def getSiteEventsInDateRange(event, context):
 
     return create_200_response(message)
 
+def getUserEventsEndingAfterTime(event, context):
+    event_body = json.loads(event.get("body", ""))
+    table = dynamodb.Table(calendar_table_name)
+    #table = dynamodb.Table('photonranch-calendar')
+
+    print("event body:")
+    print(event_body)
+
+    user_id = event_body["user_id"]
+    time = event_body["time"]
+
+    events = getUserEventsEndingAfterTimeHelper(user_id, time)
+    return create_200_response(json.dumps(events))
+
+
+
 def getEventAtTime(event, context):
     '''
     Return events that are happening at a give point in time
@@ -287,6 +328,42 @@ def isUserScheduled(event, context):
     print(f"Allowed users: {allowed_users}")
     return create_200_response(user in allowed_users)
 
+def doesConflictingEventExist(event, context):
+    '''
+    Calendar reservations should only let the designated user use the observatory.
+    If there are no reservations, anyone can use it. 
+    Args:
+        event.body.user_id: auth0 user 'sub' (eg. "google-oauth2|xxxxxxxxxxxxx")
+        event.body.site: site code (eg. "wmd")
+        event.body.time: UTC datestring (eg. '2020-05-14T17:30:00Z')
+    Returns:
+        True if a different user has a reservation at the specified time.
+        False otherwise.
+    '''
+
+    event_body = json.loads(event.get("body", ""))
+
+    print("event body:")
+    print(event_body)
+
+    table = dynamodb.Table(calendar_table_name)
+
+    user = event_body["user_id"]
+    site = event_body["site"]
+    time = event_body["time"]
+
+    events = getEventsDuringTime(time, site)
+
+    # If any events belong to a different user, return True (indicating conflict)
+    for event in events:
+        if event["creator_id"] != user:
+            return create_200_response(True)
+
+    # Otherwise, report no conflicts (return False)
+    return create_200_response(False)
+    
+
+
 
 
 
@@ -307,7 +384,8 @@ if __name__=="__main__":
         })
     }
 
-    print(isUserScheduled(event, {}))
+    #print(isUserScheduled(event, {}))
+    #print(getUserEventsEndingAfterTime(event, {}))
 
 
 
