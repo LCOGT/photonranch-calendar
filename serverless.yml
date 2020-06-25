@@ -1,7 +1,7 @@
 org: photonadmin # Corresponds to the serverless.com account used for monitoring
 app: photonranch
 
-service: calendar-backend
+service: photonranch-projects
 
 package:
   exclude:
@@ -11,20 +11,32 @@ package:
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
+  - serverless-domain-manager
 
 # Enable point-in-time-recovery
 custom:
   pitr:
-    - tableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+    - tableName: ${self:provider.environment.PROJECTS_TABLE}
       enabled: true
 
+  # This is the 'variable' for the customDomain.basePath value, based on the stage.
+  # Run as `sls deploy --stage <stage_name>`
+  stage:
+    dev: dev
+    test: test 
+
+  customDomain:
+    domainName: 'projects.photonranch.org'
+    basePath: ${self:custom.stage.${self:provider.stage}}
+    stage: ${self:provider.stage}
+    createRoute53Record: true
 
 provider:
   name: aws
   runtime: python3.7
   region: us-east-1
   environment: 
-    DYNAMODB_CALENDAR: photonranch-calendar
+    PROJECTS_TABLE: photonranch-projects
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
   iamRoleStatements:
@@ -37,7 +49,7 @@ provider:
         - "dynamodb:Scan"
         - "dynamodb:Query"
       Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_CALENDAR}*"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.PROJECTS_TABLE}*"
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -84,50 +96,51 @@ resources: # CloudFormation template syntax from here on.
           Ref: 'ApiGatewayRestApi'
         StatusCode: '401'
 
-    # Define the dynamodb table we use to store calendar events
-    messagesTable: 
+    # Define the dynamodb table we use to store projects
+
+    projectsTable: 
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+        TableName: ${self:provider.environment.PROJECTS_TABLE}
         AttributeDefinitions:
-          - AttributeName: event_id
+          - AttributeName: project_name
             AttributeType: S
-          - AttributeName: start
+          - AttributeName: user_id
             AttributeType: S
-          - AttributeName: end
+          - AttributeName: created_at
             AttributeType: S
-          - AttributeName: site
-            AttributeType: S
-          - AttributeName: creator_id
-            AttributeType: S
+          #- AttributeName: site
+            #AttributeType: S
+          #- AttributeName: creator_id
+            #AttributeType: S
         KeySchema:
-          - AttributeName: event_id
+          - AttributeName: project_name
             KeyType: HASH
-          - AttributeName: start
+          - AttributeName: created_at
             KeyType: RANGE
         GlobalSecondaryIndexes:
-          - IndexName: creatorid-end-index
+          - IndexName: userid-createdat-index
             KeySchema:
-              - AttributeName: creator_id
+              - AttributeName: user_id
                 KeyType: HASH
-              - AttributeName: end
+              - AttributeName: created_at
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
             ProvisionedThroughput:
               ReadCapacityUnits: 1
               WriteCapacityUnits: 1
-          - IndexName: site-end-index
-            KeySchema:
-              - AttributeName: site
-                KeyType: HASH
-              - AttributeName: end
-                KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-            ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1
+          #- IndexName: site-end-index
+            #KeySchema:
+              #- AttributeName: site
+                #KeyType: HASH
+              #- AttributeName: end
+                #KeyType: RANGE
+            #Projection:
+              #ProjectionType: ALL
+            #ProvisionedThroughput:
+              #ReadCapacityUnits: 1
+              #WriteCapacityUnits: 1
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
@@ -136,11 +149,68 @@ functions:
   authorizerFunc: 
     handler: authorizer.auth
     cors: true
-  addNewEvent:
-    handler: handler.addNewEvent
+  addNewProject:
+    handler: handler.addNewProject
     events:
       - http:
-          path: newevent 
+          path: new-project
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  getProject:
+    handler: handler.getProject
+    events:
+      - http:
+          path: get-project
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  addProjectData:
+    handler: handler.addProjectData
+    events:
+      - http:
+          path: add-project-data
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  deleteProject:
+    handler: handler.deleteProject
+    events:
+      - http:
+          path: delete-project
           method: post
           authorizer:
             name: authorizerFunc
@@ -156,51 +226,11 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  deleteEventById:
-    handler: handler.deleteEventById
+  getAllProjects:
+    handler: handler.getAllProjects
     events:
       - http:
-          path: delete
-          method: post
-          authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
-  modifyEvent:
-    handler: handler.modifyEvent
-    events:
-      - http:
-          path: modifyevent 
-          method: post 
-          authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
-  getSiteEventsInDateRange:
-    handler: handler.getSiteEventsInDateRange
-    events:
-      - http:
-          path: siteevents 
+          path: get-all-projects
           method: post
           cors:
             origin: '*'
@@ -213,63 +243,15 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  getEventAtTime:
-    handler: handler.getEventAtTime
+  getUserProjects:
+    handler: handler.getUserProjects
     events:
       - http:
-          path: get-event-at-time
+          path: get-user-projects
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
-  getUserEventsEndingAfterTime:
-    handler: handler.getUserEventsEndingAfterTime
-    events:
-      - http:
-          path: user-events-ending-after-time
-          method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
-  isUserScheduled:
-    handler: handler.isUserScheduled
-    events:
-      - http:
-          path: is-user-scheduled
-          method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
-  doesConflictingEventExist:
-    handler: handler.doesConflictingEventExist
-    events:
-      - http:
-          path: does-conflicting-event-exist
-          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
           cors:
             origin: '*'
             headers:
