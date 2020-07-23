@@ -2,6 +2,7 @@ import json
 import os
 import boto3
 import decimal
+import requests
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
@@ -42,6 +43,8 @@ def create_403_response(message):
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
     def default(self, o):
+        if isinstance(o, set):
+            return list(o)
         if isinstance(o, decimal.Decimal):
             if o % 1 > 0:
                 return float(o)
@@ -78,7 +81,6 @@ def getEventsDuringTime(time, site):
         time: UTC datestring (eg. '2020-05-14T17:30:00Z')
     '''
     table = dynamodb.Table(calendar_table_name)
-    #table = dynamodb.Table('photonranch-calendar')
     response = table.query(
         IndexName="site-end-index",
         KeyConditionExpression=
@@ -86,29 +88,21 @@ def getEventsDuringTime(time, site):
                 & Key('end').gte(time),
         FilterExpression=Key('start').lte(time)
     )
+    #table = dynamodb.Table('photonranch-calendar')
     print(f"Items during {time}: {response['Items']}")
     return response['Items']
 
-def getUserEventsEndingAfterTimeHelper(user_id: str, time: str) -> list:
-    ''' 
-    Get any calendar events created by a user ending after the given time.
-    Args:
-        user_id: auth0 'sub' parameter (eg. "google-oauth2|100354044239485750027")
-        time: UTC datestring (eg. '2020-05-14T17:30:00Z')
-    Returns:
-        list of events
-    '''
-    table = dynamodb.Table(calendar_table_name)
-    #table = dynamodb.Table('photonranch-calendar')
-    response = table.query(
-        IndexName="creatorid-end-index",
-        KeyConditionExpression=
-                Key('creator_id').eq(user_id)
-                & Key('end').gte(time)
-    )
-    print(f"Items ending after {time}: {response['Items']}")
-    return response['Items']
-
+def getProject(project_name, created_at):
+    url = "https://projects.photonranch.org/dev/get-project"
+    body = json.dumps({
+        "project_name": project_name,
+        "created_at": created_at,
+    })
+    response = requests.post(url, body)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return "Project not found."
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -185,6 +179,97 @@ def modifyEvent(event, context):
     print(f"put response: {response}")
     return create_200_response(json.dumps(response))
 
+def addProjectsToEvents(event, context):
+    """
+    Endpoint to add project ids to calendar events. 
+    Args:
+        event.body.project_id (str): id of the project to add to the event (project_name#created_timestamp)
+        event.body.events (array): contains dicts for each calendar event we 
+            want to add the project to. Each dict has keys 'event_id' and 
+            'start', which are the partition key and sort key for the event. 
+    Returns:
+        nothing important. just a list of responses from the item updates.
+    """
+
+    event_body = json.loads(event.get("body", ""))
+    table = dynamodb.Table(calendar_table_name)
+
+    print("event")
+    print(json.dumps(event))
+
+    ## Get the user's roles provided by the lambda authorizer
+    #userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
+    #print(f"userMakingThisRequest: {userMakingThisRequest}")
+    #userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
+    #print(f"userRoles: {userRoles}")
+
+    ## Check if the requester is an admin
+    #requesterIsAdmin="false"
+    #if 'admin' in userRoles:
+        #requesterIsAdmin="true"
+    #print(f"requesterIsAdmin: {requesterIsAdmin}")
+
+    project_id = event_body['project_id']
+    events = event_body['events']
+
+    responses = []
+    for event in events:
+        resp = table.update_item(
+            Key={
+                "event_id": event["event_id"],
+                "start": event["start"],
+            },
+            UpdateExpression="SET project_id = :id",
+            ExpressionAttributeValues={
+                ":id": project_id,
+            }
+        )
+        responses.append(resp)
+
+    return create_200_response(json.dumps(responses, indent=4, cls=DecimalEncoder))
+
+def removeProjectFromEvents(event, context):
+    '''
+    Endpoint to remove project ids to calendar events. 
+    Args:
+        event.body.events (array): list of 'event_id' to modify
+
+    '''
+
+    request_body = json.loads(event.get("body"))
+    table = dynamodb.Table(calendar_table_name)
+
+    events = request_body['events']
+    print(request_body)
+
+    for event_id in events:
+
+        # get the start value from the event with given event_id
+        # We need both values to do an update_item operation
+        query_response = table.query(
+            Key={
+                "event_id": event_id,
+            }
+        )
+        print(f"query response: {query_response}")
+        start = query_response['Items'][0]['start']
+
+        # Update the item, setting the project_id to 'none'
+        update_response = table.update_item(
+            Key={
+                "event_id": event_id,
+                "start": start,
+            },
+            UpdateExpression="SET project_id = :none",
+            ExpressionAttributeValues={
+                ":none": "none"
+            }
+        )
+        print(f'update response: {update_response}')
+
+    return create_200_response("Success")
+    
+
 def deleteEventById(event, context):
 
     event_body = json.loads(event.get("body", ""))
@@ -235,13 +320,28 @@ def deleteEventById(event, context):
 
 
 def getSiteEventsInDateRange(event, context):
+    ''' 
+    Sample python request to this endpoint: 
 
-    event_body = json.loads(event.get("body", ""))
+        import requests, json
+        url = "https://calendar.photonranch.org/dev/siteevents"
+        body = json.dumps({
+            "site": "saf", 
+            "start": "2020-06-01T01:00:00Z",
+            "end": "2020-06-02T01:00:00Z",
+            "full_project_details": True
+        })
+        response = requests.post(url, body).json()
+
+    '''
+
+    request_body = json.loads(event.get("body", ""))
+    print(request_body)
     table = dynamodb.Table(calendar_table_name)
 
     # Check that all required keys are present.
     required_keys = ['site', 'start', 'end']
-    actual_keys = event_body.keys()
+    actual_keys = request_body.keys()
     for key in required_keys:
         if key not in actual_keys:
             print(f"Error: missing required key {key}")
@@ -254,21 +354,29 @@ def getSiteEventsInDateRange(event, context):
                 },
             }
 
-    start_date = event_body['start']
-    end_date = event_body['end']
-    site = event_body['site']
+    start_date = request_body['start']
+    end_date = request_body['end']
+    site = request_body['site']
 
     table_response = table.query(
         IndexName="site-end-index",
         KeyConditionExpression=Key('site').eq(site) & Key('end').between(start_date, end_date)
     )
 
-    message = json.dumps({
-        'table_response': table_response,
-        'new_calendar_event': event_body,
-    })
+    events = table_response['Items']
 
-    return create_200_response(message)
+    if 'full_project_details' in request_body and request_body['full_project_details']:
+        # Get the project details for each event. 
+        for e in events: 
+            project_id = e['project_id']
+            if project_id != "none":
+                project_name = project_id.split('#')[-2]
+                created_at = project_id.split('#')[-1]
+                e['project'] = getProject(project_name, created_at)
+
+
+
+    return create_200_response(json.dumps(events, cls=DecimalEncoder))
 
 def getUserEventsEndingAfterTime(event, context):
     event_body = json.loads(event.get("body", ""))
@@ -281,9 +389,13 @@ def getUserEventsEndingAfterTime(event, context):
     user_id = event_body["user_id"]
     time = event_body["time"]
 
-    events = getUserEventsEndingAfterTimeHelper(user_id, time)
-    return create_200_response(json.dumps(events))
-
+    response = table.query(
+        IndexName="creatorid-end-index",
+        KeyConditionExpression=
+                Key('creator_id').eq(user_id)
+                & Key('end').gte(time)
+    )
+    return create_200_response(json.dumps(response['Items'], cls=DecimalEncoder))
 
 
 def getEventAtTime(event, context):

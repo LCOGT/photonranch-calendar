@@ -11,12 +11,25 @@ package:
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
+  - serverless-domain-manager
 
 # Enable point-in-time-recovery
 custom:
   pitr:
     - tableName: ${self:provider.environment.DYNAMODB_CALENDAR}
       enabled: true
+
+  # This is the 'variable' for the customDomain.basePath value, based on the stage.
+  # Run as `sls deploy --stage <stage_name>`
+  stage:
+    dev: dev
+    test: test 
+
+  customDomain:
+    domainName: 'calendar.photonranch.org'
+    basePath: ${self:custom.stage.${self:provider.stage}}
+    stage: ${self:provider.stage}
+    createRoute53Record: true
 
 
 provider:
@@ -196,6 +209,47 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
+  addProjectsToEvents:
+    handler: handler.addProjectsToEvents
+    events:
+      - http:
+          path: add-projects-to-events
+          method: post 
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  removeProjectFromEvents:
+    handler: handler.removeProjectFromEvents
+    events:
+      - http:
+          path: remove-project-from-events
+          method: post 
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+
   getSiteEventsInDateRange:
     handler: handler.getSiteEventsInDateRange
     events:
