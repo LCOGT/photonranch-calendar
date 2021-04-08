@@ -25,6 +25,12 @@ custom:
     dev: dev
     test: test 
 
+  # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
+  pythonRequirements:
+    dockerizePip: true
+    useDownloadCache: false 
+    useStaticCache: false
+
   customDomain:
     domainName: 'calendar.photonranch.org'
     basePath: ${self:custom.stage.${self:provider.stage}}
@@ -34,6 +40,7 @@ custom:
 
 provider:
   name: aws
+  stage: ${opt:stage, "test"}
   runtime: python3.7
   region: us-east-1
   environment: 
@@ -148,7 +155,6 @@ resources: # CloudFormation template syntax from here on.
 functions:
   authorizerFunc: 
     handler: authorizer.auth
-    cors: true
   addNewEvent:
     handler: handler.addNewEvent
     events:

@@ -3,6 +3,7 @@ import os
 import boto3
 import decimal
 import requests
+import datetime
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
@@ -53,6 +54,8 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
+def get_utc_iso_time():
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def getEvent(eventId, eventStart):
@@ -132,6 +135,9 @@ def addNewEvent(event, context):
                     },
                 }
 
+        # add creation date
+        event_body["last_modified"] = get_utc_iso_time()
+
         table_response = table.put_item(Item=event_body)
 
         message = json.dumps({
@@ -175,6 +181,9 @@ def modifyEvent(event, context):
     # Ensure the eventId and creator do not change
     modifiedEvent['event_id'] = originalId
     modifiedEvent['creator_id'] = creatorId
+
+    # update last modified time
+    modifiedEvent['last_modified'] = get_utc_iso_time()
     response = table.put_item(Item=modifiedEvent)
     print(f"put response: {response}")
     return create_200_response(json.dumps(response))
