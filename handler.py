@@ -29,6 +29,7 @@ def create_200_response(message):
         'body': message
     }
 
+
 def create_403_response(message):
     return { 
         'statusCode': 403,
@@ -40,6 +41,7 @@ def create_403_response(message):
         },
         'body': message
     }
+
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -161,7 +163,6 @@ def modifyEvent(event, context):
 
     originalId =  originalEvent['event_id']
     originalStart = originalEvent['start']
-    modifiedStart = modifiedEvent['start']
 
     # Make sure the user is admin, or modifying their own event
     creatorId = getEvent(originalId, originalStart)['creator_id']
@@ -172,7 +173,6 @@ def modifyEvent(event, context):
 
     # If the start time is new, we need to delete and recreate the item
     # (since start time is the sort key for our table)
-    #if originalStart != modifiedStart:
     delRes = table.delete_item(
         Key={
             'event_id': originalId,

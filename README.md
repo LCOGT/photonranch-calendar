@@ -24,9 +24,7 @@ Users can request to:
 
 ### Requirements
 
-A list of Python dependencies can be found in `requirements.txt`,
-
-Serverless requirements are listed in `package.json`.
+A list of Python dependencies can be found in `requirements.txt`. Serverless requirements are listed in `package.json`.
 
 ### Testing
 
