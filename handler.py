@@ -59,7 +59,6 @@ def get_utc_iso_time():
 
 
 def getEvent(eventId, eventStart):
-
     print(f'eventId: {eventId}')
     print(f'eventStart: {eventStart}')
     table = dynamodb.Table(calendar_table_name)
@@ -76,7 +75,8 @@ def getEvent(eventId, eventStart):
         print(f"error with getEvent")
         print(e)
     return ''
-        
+      
+
 def getEventsDuringTime(time, site):
     ''' 
     Get any calendar events at a site that are active during the given time 
@@ -91,9 +91,9 @@ def getEventsDuringTime(time, site):
                 & Key('end').gte(time),
         FilterExpression=Key('start').lte(time)
     )
-    #table = dynamodb.Table('photonranch-calendar')
     print(f"Items during {time}: {response['Items']}")
     return response['Items']
+
 
 def getProject(project_name, created_at):
     url = "https://projects.photonranch.org/dev/get-project"
@@ -106,6 +106,7 @@ def getProject(project_name, created_at):
         return response.json()
     else:
         return "Project not found."
+
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -125,7 +126,7 @@ def addNewEvent(event, context):
         actual_keys = event_body.keys()
         for key in required_keys:
             if key not in actual_keys:
-                print(f"Error: missing requied key {key}")
+                print(f"Error: missing required key {key}")
                 return {
                     "statusCode": 400,
                     "body": f"Error: missing required key {key}",
@@ -149,6 +150,7 @@ def addNewEvent(event, context):
     except Exception as e: 
         print(f"Exception: {e}")
         return create_200_response(json.dumps(e))
+
 
 def modifyEvent(event, context):
     table = dynamodb.Table(calendar_table_name)
@@ -182,11 +184,12 @@ def modifyEvent(event, context):
     modifiedEvent['event_id'] = originalId
     modifiedEvent['creator_id'] = creatorId
 
-    # update last modified time
+    # Update last modified time
     modifiedEvent['last_modified'] = get_utc_iso_time()
     response = table.put_item(Item=modifiedEvent)
     print(f"put response: {response}")
     return create_200_response(json.dumps(response))
+
 
 def addProjectsToEvents(event, context):
     """
@@ -237,6 +240,7 @@ def addProjectsToEvents(event, context):
 
     return create_200_response(json.dumps(responses, indent=4, cls=DecimalEncoder))
 
+
 def removeProjectFromEvents(event, context):
     '''
     Endpoint to remove project ids to calendar events. 
@@ -253,7 +257,7 @@ def removeProjectFromEvents(event, context):
 
     for event_id in events:
 
-        # get the start value from the event with given event_id
+        # Get the start value from the event with given event_id
         # We need both values to do an update_item operation
         query_response = table.query(
             Key={
@@ -383,9 +387,8 @@ def getSiteEventsInDateRange(event, context):
                 created_at = project_id.split('#')[-1]
                 e['project'] = getProject(project_name, created_at)
 
-
-
     return create_200_response(json.dumps(events, cls=DecimalEncoder))
+
 
 def getUserEventsEndingAfterTime(event, context):
     event_body = json.loads(event.get("body", ""))
@@ -416,6 +419,7 @@ def getEventAtTime(event, context):
     Return:
         list of event objects
     '''
+    
     event_body = json.loads(event.get("body", ""))
     table = dynamodb.Table(calendar_table_name)
     print("event body:")
@@ -425,7 +429,8 @@ def getEventAtTime(event, context):
     site = event_body["site"]
     events = getEventsDuringTime(time, site)
     return create_200_response(json.dumps(events))
-        
+      
+
 def isUserScheduled(event, context):
     '''
     Check if a user has a calendar event for a specific site and time.
@@ -434,6 +439,7 @@ def isUserScheduled(event, context):
         event.body.site: site code (eg. "wmd")
         event.body.time: UTC datestring (eg. '2020-05-14T17:30:00Z')
     '''
+   
     event_body = json.loads(event.get("body", ""))
     print("event body:")
     print(event_body)
@@ -448,6 +454,7 @@ def isUserScheduled(event, context):
     allowed_users = [event["creator_id"] for event in events]
     print(f"Allowed users: {allowed_users}")
     return create_200_response(user in allowed_users)
+
 
 def doesConflictingEventExist(event, context):
     '''
@@ -482,32 +489,5 @@ def doesConflictingEventExist(event, context):
 
     # Otherwise, report no conflicts (return False)
     return create_200_response(False)
-    
 
-
-
-
-
-
-if __name__=="__main__":
-
-    calendar_table_name = "photonranch-calendar"
-
-    time = "2020-05-12T16:40:00Z" # This should be during 'cool cave' at ALI-sim
-    site = "ALI-sim"
-    user_id = "google-oauth2|100354044221813550027"
-
-    event = {
-        "body": json.dumps({
-            "user_id": user_id,
-            "site": site,
-            "time": time
-        })
-    }
-
-    #print(isUserScheduled(event, {}))
-    #print(getUserEventsEndingAfterTime(event, {}))
-
-
-
-
+ 
