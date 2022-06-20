@@ -15,8 +15,12 @@ plugins:
 
 # Enable point-in-time-recovery
 custom:
+
+  # Define the name for the calendar dynamodb table
+  calendarTableName: calendar-${self:custom.stage.${self:provider.stage}}
+
   pitr:
-    - tableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+    - tableName: ${self:custom.calendarTableName}
       enabled: true
 
   # This is the 'variable' for the customDomain.basePath value, based on the stage.
@@ -24,7 +28,7 @@ custom:
   stage:
     prod: calendar
     dev: dev
-    test: test 
+    test: test
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
@@ -46,7 +50,7 @@ provider:
   runtime: python3.9
   region: us-east-1
   environment: 
-    DYNAMODB_CALENDAR: photonranch-calendar
+    DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
   iam:
@@ -61,7 +65,7 @@ provider:
             - "dynamodb:Scan"
             - "dynamodb:Query"
           Resource:
-            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_CALENDAR}*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -109,10 +113,10 @@ resources: # CloudFormation template syntax from here on.
         StatusCode: '401'
 
     # Define the dynamodb table we use to store calendar events
-    messagesTable: 
+    calendarTable: 
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+        TableName: ${self:custom.calendarTableName}
         AttributeDefinitions:
           - AttributeName: event_id
             AttributeType: S
