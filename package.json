@@ -1,5 +1,5 @@
 {
-  "name": "calendar-backend",
+  "name": "photonranch-calendar",
   "description": "Backend services for calendar requests",
   "version": "0.1.1",
   "dependencies": {

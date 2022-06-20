@@ -1,6 +1,5 @@
 import json
 import os
-import http.client
 import requests
 
 import jwt
