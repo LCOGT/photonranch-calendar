@@ -1,17 +1,20 @@
 org: photonadmin # Corresponds to the serverless.com account used for monitoring
 app: photonranch
 
-service: photonranch-calendar
+service: calendar-backend
+
 
 package:
   patterns:
     - venv/**
     - node_modules/**
 
+
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
   - serverless-domain-manager
+
 
 # Enable point-in-time-recovery
 custom:
@@ -53,6 +56,7 @@ provider:
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
+    stage: ${self:custom.stage.${self:provider.stage}}
   iam:
     role:
       statements:
@@ -66,6 +70,7 @@ provider:
             - "dynamodb:Query"
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
+
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -159,6 +164,7 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+
 
 functions:
   authorizerFunc: 
