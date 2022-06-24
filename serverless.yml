@@ -3,15 +3,18 @@ app: photonranch
 
 service: calendar-backend
 
+
 package:
-  exclude:
+  patterns:
     - venv/**
     - node_modules/**
+
 
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
   - serverless-domain-manager
+
 
 # Enable point-in-time-recovery
 custom:
@@ -28,11 +31,12 @@ custom:
   stage:
     prod: calendar
     dev: dev
-    test: test 
+    test: test
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
     dockerizePip: true
+    dockerImage: public.ecr.aws/sam/build-python3.9:1
     useDownloadCache: false 
     useStaticCache: false
 
@@ -46,23 +50,27 @@ custom:
 provider:
   name: aws
   stage: ${opt:stage, "test"}
-  runtime: python3.7
+  runtime: python3.9
   region: us-east-1
   environment: 
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
-  iamRoleStatements:
-    - Effect: Allow 
-      Action: 
-        - "dynamodb:PutItem"
-        - "dynamodb:GetItem"
-        - "dynamodb:UpdateItem"
-        - "dynamodb:DeleteItem"
-        - "dynamodb:Scan"
-        - "dynamodb:Query"
-      Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
+    STAGE: ${self:custom.stage.${self:provider.stage}}
+  iam:
+    role:
+      statements:
+        - Effect: Allow 
+          Action: 
+            - "dynamodb:PutItem"
+            - "dynamodb:GetItem"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+            - "dynamodb:Scan"
+            - "dynamodb:Query"
+          Resource:
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
+
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -156,6 +164,7 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+
 
 functions:
   authorizerFunc: 
