@@ -26,15 +26,13 @@ git clone https://github.com/LCOGT/photonranch-calendar.git
 cd photonranch-calendar
 ```
 
-On your local machine, fill out the `public_key` and `secrets.json` with the required information.
-
 ### Requirements
 
 You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your credentials.
 
 ### Deployment
 
-Changes pushed to the test, dev, and main branches are automatically deployed with Github Actions. For manual deployment, you'll need to run:
+Changes pushed to the test, dev, and main branches are automatically deployed with Github Actions. For manual deployment, you'll need to fill out the `public_key` and `secrets.json` with the required information. Then, run:
 
 ```
 npm install
