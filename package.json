@@ -3,6 +3,7 @@
   "description": "Backend services for calendar requests",
   "version": "0.1.1",
   "dependencies": {
+    "serverless": "3.19.0",
     "serverless-domain-manager": "6.0.3",
     "serverless-dynamodb-pitr": "^0.1.1"
   },
