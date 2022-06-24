@@ -7,10 +7,43 @@ This is a Serverless API deployed by the Serverless Framework, which creates and
 ## Description
 
 The Photon Ranch calendar allows authenticated users to create and manage reservations for real time and automated observing sessions. Each site page has a calendar tab. Users can request to:
+
 - Add a new reservation to the calendar
 - Modify an existing reservation
 - Add or remove a [project](https://github.com/LCOGT/photonranch-projects) to a reservation
 - Delete a reservation from the calendar
+
+## Dependencies
+
+This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`. A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
+
+## Local Development
+
+First, clone the repository:
+
+```
+git clone https://github.com/LCOGT/photonranch-calendar.git
+cd photonranch-calendar
+```
+
+On your local machine, fill out the `public_key` and `secrets.json` with the required information.
+
+### Requirements
+
+You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your credentials.
+
+### Deployment
+
+Changes pushed to the test, dev, and main branches are automatically deployed with Github Actions. For manual deployment, you'll need to run:
+
+```
+npm install
+serverless deploy --stage {stage}
+```
+
+### Testing
+
+Instructions to manually run tests will be detailed here.
 
 ## Calendar Event Syntax 
 
@@ -34,17 +67,17 @@ The body of a calendar event follows the JSON format below:
 
 ## API Endpoints
 
-Calendar requests are handled at the base URL `https://calendar.photonranch.org`. Each endpoint contains the path parameter `{stage}`, the deployment stage in ["test", "dev", "prod"].
+Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is the deployment stage in ["test", "dev", "prod"].
 
-- POST `/{stage}/newevent`
+- POST `/newevent`
   - Description: Create a new reservation on the calendar.
   - Authorization required: Yes.
   - Request body: JSON body as specified in the syntax above.
   - Responses:
     - 200: update calendar table and add new calendar event.
-    - 400: missing required key in `[event_id, site, start]` in the POST body.
+    - 400: missing required key in `[event_id, site, start]` in the request body.
 
-- POST `/{stage}/modifyevent`
+- POST `/modifyevent`
   - Description: Update an existing calendar reservation with changes.
   - Authorization required: Yes.
   - Request body: JSON body with changes following the syntax above.
@@ -52,7 +85,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
     - 200: update calendar event.
     - 403: unauthorized request.
 
-- POST `/{stage}/add-projects-to-events`
+- POST `/add-projects-to-events`
   - Description: Adds a user's existing projects to a calendar event.
   - Authorization required: No.
   - Request body:
@@ -61,7 +94,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: update calendar event.
 
-- POST `/{stage}/remove-project-from-events`
+- POST `/remove-project-from-events`
   - Description: Removes a user's existing projects from a calendar event by setting `project_id` to `'none'`.
   - Authorization required: No.
   - Request body:
@@ -69,7 +102,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: success.
 
-- POST `/{stage}/delete`
+- POST `/delete`
   - Description: Delete a calendar event given an event_id.
   - Authorization required: Yes.
   - Request body:
@@ -80,7 +113,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
     - 200: success deleting event.
     - 403: unauthorized request.
 
-- POST `/{stage}/siteevents`
+- POST `/siteevents`
   - Description: Return a list of events at a specific site within a specified date range.
   - Authorization required: No.
   - Request body:
@@ -89,8 +122,9 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
     - `site` (string): sitecode (eg. 'saf').
   - Responses:
     - 200: return matching events.
+    - 400: missing required key in request body.
 
-- POST `/{stage}/user-events-ending-after-time`
+- POST `/user-events-ending-after-time`
   - Description: Return a list of user events that end after a specified time.
   - Authorization required: No.
   - Request body:
@@ -99,7 +133,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: return matching events.
 
-- POST `/{stage}/get-event-at-time`
+- POST `/get-event-at-time`
   - Description: Return a list of events that are happening at a given time.
   - Authorization required: No.
   - Request body:
@@ -108,7 +142,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: return matching events.
 
-- POST `/{stage}/is-user-scheduled`
+- POST `/is-user-scheduled`
   - Description: Check if a user is scheduled for an event at a specific site and time.
   - Authorization required: No.
   - Request body:
@@ -118,7 +152,7 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: return matching users.
 
-- POST `/{stage}/does-conflicting-event-exist`
+- POST `/does-conflicting-event-exist`
   - Description: Check if an existing event conflicts while making a reservation.
   - Authorization required: No.
   - Request body:
@@ -128,26 +162,3 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org`
   - Responses:
     - 200: true if conflicting events from a different user exist at the same time.
     - 200: false if no conflicting events exist.
-
-## Dependencies
-
-This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`. A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
-
-## Local Development
-
-First, clone the repository:
-
-```
-git clone https://github.com/LCOGT/photonranch-calendar.git
-cd photonranch-calendar
-```
-
-Deployment information will be detailed here.
-
-### Requirements
-
-You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your credentials.
-
-### Testing
-
-Instructions to manually run tests will be detailed here.
