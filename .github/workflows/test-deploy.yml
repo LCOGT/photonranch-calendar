@@ -71,6 +71,6 @@ jobs:
     - name: Serverless Deploy
       uses: dhollerbach/github-action-serverless-with-python-requirements@master
       with:
-        args: '--stage test --verbose'
+        args: '--stage test'
       env:
         SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
