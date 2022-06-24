@@ -5,7 +5,7 @@ service: calendar-backend
 
 
 package:
-  exclude:
+  patterns:
     - venv/**
     - node_modules/**
 
