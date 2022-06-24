@@ -71,5 +71,6 @@ jobs:
         args: '--stage test'
       env:
         SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        SLS_INTERACTIVE_SETUP_ENABLE: 1
         AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
