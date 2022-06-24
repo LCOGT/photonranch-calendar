@@ -69,8 +69,8 @@ jobs:
         python-version: 3.9  
 
     - name: Serverless Deploy
-      uses: dhollerbach/github-action-serverless-with-python-requirements@master
-      with:
-        args: '--stage test'
+      run: npx serverless deploy --stage test
       env:
-        SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
+     
