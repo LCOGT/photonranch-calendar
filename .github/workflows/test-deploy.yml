@@ -51,7 +51,7 @@ jobs:
         {
         "AUTH0_CLIENT_ID": "${{ secrets.AUTH0_CLIENT_ID }}"
         }
-      EOF
+        EOF
 
     - uses: actions/checkout@v3
     - name: Use Node.js ${{ matrix.node-version }}
