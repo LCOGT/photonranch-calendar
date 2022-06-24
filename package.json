@@ -7,5 +7,5 @@
     "serverless-domain-manager": "6.0.3",
     "serverless-dynamodb-pitr": "^0.1.1",
     "serverless-python-requirements": "^5.4.0"
-  },
+  }
 }
