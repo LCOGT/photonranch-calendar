@@ -37,6 +37,9 @@ jobs:
         node-version: [16.x]
     
     steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+      
     - name: Create public_key file
       run: |
         cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
@@ -53,12 +56,15 @@ jobs:
         }
         EOF
 
-    - uses: actions/checkout@v3
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
+        
     - run: npm ci
+    
+    - run: pwd && ls
+    
     - name: serverless deploy
       uses: serverless/github-action@v3.1
       with:
