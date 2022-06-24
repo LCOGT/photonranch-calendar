@@ -56,7 +56,7 @@ provider:
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
-    stage: ${self:custom.stage.${self:provider.stage}}
+    STAGE: ${self:custom.stage.${self:provider.stage}}
   iam:
     role:
       statements:

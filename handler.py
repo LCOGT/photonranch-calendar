@@ -16,24 +16,11 @@ calendar_table_name = os.environ['DYNAMODB_CALENDAR']
 #=======     Helper Functions     ========#
 #=========================================#
 
-def create_200_response(message):
-    """Return a status code 200 for a successful request."""
-    return { 
-        'statusCode': 200,
-        'headers': {
-            # Required for CORS support to work
-            'Access-Control-Allow-Origin': '*',
-            # Required for cookies, authorization headers with HTTPS
-            'Access-Control-Allow-Credentials': 'true',
-        },
-        'body': message
-    }
+def create_response(status_code: int, message):
+    """Returns a given status code."""
 
-
-def create_403_response(message):
-    """Return a status code 403 for an understood but unauthorized request."""
     return { 
-        'statusCode': 403,
+        'statusCode': status_code,
         'headers': {
             # Required for CORS support to work
             'Access-Control-Allow-Origin': '*',
@@ -46,6 +33,7 @@ def create_403_response(message):
 
 class DecimalEncoder(json.JSONEncoder):
     """Helper class to convert a DynamoDB item to JSON."""
+
     def default(self, o):
         if isinstance(o, set):
             return list(o)
@@ -58,12 +46,14 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 def get_utc_iso_time():
-    """Return formatted UTC datetime string of current time."""
+    """Returns formatted UTC datetime string of current time."""
+
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def getEvent(eventId, eventStart):
-    """Return details of reuqested event from the calendar database."""
+    """Returns details of a requested event from the calendar database."""
+
     print(f'eventId: {eventId}')
     print(f'eventStart: {eventStart}')
     table = dynamodb.Table(calendar_table_name)
@@ -83,15 +73,14 @@ def getEvent(eventId, eventStart):
       
 
 def getEventsDuringTime(time, site):
-    """
-    Get any calendar events at a site that are active during the given time.
+    """Gets calendar events at a site that are active during a given time.
     
-    Parameters:
-        time (str): UTC datestring (eg. '2022-05-14T17:30:00Z')
-        site (str): sitecode (eg. 'saf')
+    Args:
+        time (str): UTC datestring (eg. '2022-05-14T17:30:00Z').
+        site (str): sitecode (eg. 'saf').
 
     Returns:
-        List of matching items
+        A list of event objects matching time and site criteria.
     """
 
     table = dynamodb.Table(calendar_table_name)
@@ -107,16 +96,16 @@ def getEventsDuringTime(time, site):
 
 
 def getProject(project_name, created_at):
-    """
-    Get project details from the projects backend.
+    """Get project details from the projects backend.
 
-    Parameters:
-        project_name (str): Name of the project in the projects-{stage} database
-        created_at (str): UTC datestring at creation (eg. '2022-05-14T17:30:00Z')
+    Args:
+        project_name (str):
+            Name of the project in the projects-{stage} database.
+        created_at (str):
+            UTC datestring at creation (eg. '2022-05-14T17:30:00Z').
 
     Returns:
-        If it exists, POST the JSON of requested project details with status code 200.
-        Otherwise, return a message indicating project not found.
+        Requested project details JSON, if response code 200.
     """
 
     url = f"https://projects.photonranch.org/{str(os.getenv(STAGE))}/get-project"
@@ -136,22 +125,19 @@ def getProject(project_name, created_at):
 #=========================================#
 
 def addNewEvent(event, context):
-    """
-    Endpoint to add a new event (reservation) to the calendar.
+    """Endpoint to add a new event (reservation) to the calendar.
 
-    Parameters:
+    Args:
         event.body.event_id (str): 
-            Unique id generated for each new event (eg. '999xx09b-xxxx-...')
+            Unique id generated for each new event (eg. '999xx09b-xxxx-...').
         event.body.start (str): 
-            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z')
-        event.body.site (str): sitecode (eg. 'saf')
+            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
+        event.body.site (str):
+            sitecode (eg. 'saf').
 
     Returns:
-        POST the JSON body of project details with 
-        status code 200 to the calendar database, if successful
-
-    Raises:
-        Exception if request is not successful
+        200 status code with new calendar event if successful.
+        400 status code if missing required keys or otherwise unsuccessful.
     """
 
     try:
@@ -166,15 +152,9 @@ def addNewEvent(event, context):
         actual_keys = event_body.keys()
         for key in required_keys:
             if key not in actual_keys:
-                print(f"Error: missing required key {key}")
-                return {
-                    "statusCode": 400,
-                    "body": f"Error: missing required key {key}",
-                    "headers": {
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Credentials": "true",
-                    },
-                }
+                msg = f"Error: missing required key {key}"
+                print(msg)
+                return create_response(400, msg)
 
         # Add creation date
         event_body["last_modified"] = get_utc_iso_time()
@@ -185,32 +165,33 @@ def addNewEvent(event, context):
             'table_response': table_response,
             'new_calendar_event': event_body,
         })
-        return create_200_response(message)
+        return create_response(200, message)
 
+    # Something else went wrong, return a Bad Request status code.
     except Exception as e: 
         print(f"Exception: {e}")
-        return create_200_response(json.dumps(e))
+        return create_response(400, json.dumps(e))
 
 
 def modifyEvent(event, context):
-    """
-    Endpoint to update an existing calendar events with changes.
-    A user may only modify their own events in the calendar, unless they are an admin.
+    """Endpoint to update an existing calendar events with changes.
 
-    Parameters:
+    A user may only modify their own events in the calendar,
+    unless they are an admin.
+
+    Args:
         event.body.event_id (str): 
-            Unique id generated for each new event (eg. '999xx09b-xxxx-...')
+            Unique id generated for each new event (eg. '999xx09b-xxxx-...').
         event.body.start (str): 
-            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z')
+            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
         context.requestContext.authorizer.principalID (str):
-            auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx')
+            Auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx').
         context.requestContext.authorizer.userRoles (str):
-            global user account type (eg. 'admin')
+            Global user account type (eg. 'admin').
 
     Returns:
-        If successful, POST the modified JSON of project details
-        with status code 200 to the calendar database.
-        If unauthorized, return status code 403.
+        200 status code with modified project body if successful.
+        403 status code if user is unauthorized.
     """
 
     table = dynamodb.Table(calendar_table_name)
@@ -227,7 +208,7 @@ def modifyEvent(event, context):
     userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
     userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
     if creatorId != userMakingThisRequest and 'admin' not in userRoles:
-        return create_403_response("You may only modify your own events.")
+        return create_response(403, "You may only modify your own events.")
 
     # Delete and recreate the item since start time is the sort key for our table
     delRes = table.delete_item(
@@ -245,23 +226,23 @@ def modifyEvent(event, context):
     modifiedEvent['last_modified'] = get_utc_iso_time()
     response = table.put_item(Item=modifiedEvent)
     print(f"put response: {response}")
-    return create_200_response(json.dumps(response))
+    return create_response(200, json.dumps(response))
 
 
 def addProjectsToEvents(event, context):
-    """
-    Endpoint to add project ids to calendar events.
+    """Endpoint to add project ids to calendar events.
     
-    Parameters:
+    Args:
         event.body.project_id (str): 
-            id of the project to add to the event (eg. 'Orion Assignment#2022-02-14T17:30:00Z')
+            Id of the project to add to the event
+            (eg. 'Orion Assignment#2022-02-14T17:30:00Z').
         event.body.events (arr):
-            Contains dicts for each calendar event we want to add the project to.
-            Each dict has keys 'event_id' and 'start', which are the partition key
-            and sort key for the event. 
+            Contains dicts for each calendar event we want to add the 
+            project to. Each dict has keys 'event_id' and 'start', 
+            which are the partition key and sort key for the event.
 
     Returns:
-        List of items updated in the calendar database
+        200 status code with list of items updated in the calendar database.
     """
 
     event_body = json.loads(event.get("body", ""))
@@ -287,21 +268,20 @@ def addProjectsToEvents(event, context):
         )
         responses.append(resp)
 
-    return create_200_response(json.dumps(responses, indent=4, cls=DecimalEncoder))
+    return create_response(200, json.dumps(responses, indent=4, cls=DecimalEncoder))
 
 
 def removeProjectFromEvents(event, context):
-    """
-    Endpoint to remove project ids from calendar events. 
+    """Endpoint to remove projects from calendar events. 
     
-    Parameters:
+    Args:
         event.body.events (arr): 
-            Contains dicts for each calendar event we want to add the project to.
-            Each dict has keys 'event_id' and 'start', which are the partition key
-            and sort key for the event.
+            Contains dicts for each calendar event we want to add the 
+            project to. Each dict has keys 'event_id' and 'start', 
+            which are the partition key and sort key for the event.
 
     Returns:
-        Success code updating events in calendar database
+        200 status code with success message.
     """
 
     request_body = json.loads(event.get("body"))
@@ -335,27 +315,27 @@ def removeProjectFromEvents(event, context):
         )
         print(f'update response: {update_response}')
 
-    return create_200_response("Success")
+    return create_response(200, "Success")
     
 
 def deleteEventById(event, context):
-    """
-    Endpoint to delete calendar events with an event_id.
+    """Endpoint to delete calendar events with an event_id.
 
-    Parameters:
-        event.body.event_id (str): 
-            Unique id for events to delete (eg. '999xx09b-xxxx-...')
+    Args:
+        event.body.event_id (str):
+            Unique id for events to delete (eg. '999xx09b-xxxx-...').
         event.body.start (str): 
-            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z')
+            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
         context.requestContext.authorizer.principalID (str):
-            auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx')
-        context.requestContext.authorizer.userRoles (str): global user account type (eg. 'admin')
+            Auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx').
+        context.requestContext.authorizer.userRoles (str):
+            Global user account type (eg. 'admin').
 
     Returns:
-        Deleted event with status code 200, if successful
+        200 status code with response.
 
     Raises:
-        ClientError: ConditionalCheckFailedException with 
+        ClientError: ConditionalCheckFailedException with
         status code 403 if the requesting user is unauthorized.
     """
 
@@ -398,27 +378,30 @@ def deleteEventById(event, context):
         print(f"error deleting event: {e}")
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
             print(e.response['Error']['Message'])
-            return create_403_response("You may only modify your own events.")
-        return create_403_response(e.response['Error']['Message'])
+            return create_response(403, "You may only modify your own events.")
+        return create_response(403, e.response['Error']['Message'])
     
     message = json.dumps(response, indent=4, cls=DecimalEncoder)
     print(f"success deleting event, message: {message}")
-    return create_200_response(message)
+    return create_response(200, message)
 
 
 def getSiteEventsInDateRange(event, context):
-    """
-    Return calendar events within a specified date range at a given site.
+    """Return calendar events within a specified date range at a given site.
 
-    Parameters:
-        event.body.event_id (str): Unique id for event (eg. '999xx09b-xxxx-...')
-        event.body.start (str): UTC datestring of starting time (eg. '2022-05-14T17:30:00Z')
-        event.body.end (str): UTC datestring of ending time (eg. '2022-05-14T18:00:00Z')
+    Args:
+        event.body.event_id (str):
+            Unique id for event (eg. '999xx09b-xxxx-...').
+        event.body.start (str):
+            UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
+        event.body.end (str):
+            UTC datestring of ending time (eg. '2022-05-14T18:00:00Z').
 
     Returns:
-        List of matching events objects
+        200 status code with list of matching events objects.
+        400 status code if a required key is missing.
 
-    Sample python request to this endpoint: 
+    Sample Python request to this endpoint: 
 
         import requests, json
         url = "https://calendar.photonranch.org/dev/siteevents"
@@ -439,16 +422,10 @@ def getSiteEventsInDateRange(event, context):
     required_keys = ['site', 'start', 'end']
     actual_keys = request_body.keys()
     for key in required_keys:
-        if key not in actual_keys:
-            print(f"Error: missing required key {key}")
-            return {
-                "statusCode": 400,
-                "body": f"Error: missing required key {key}",
-                "headers": {
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Credentials": "true",
-                },
-            }
+        if key not in actual_keys:  
+            msg = f"Error: missing required key {key}"
+            print(msg)
+            return create_response(400, msg)
 
     start_date = request_body['start']
     end_date = request_body['end']
@@ -470,19 +447,20 @@ def getSiteEventsInDateRange(event, context):
                 created_at = project_id.split('#')[-1]
                 e['project'] = getProject(project_name, created_at)
 
-    return create_200_response(json.dumps(events, cls=DecimalEncoder))
+    return create_response(200, json.dumps(events, cls=DecimalEncoder))
 
 
 def getUserEventsEndingAfterTime(event, context):
-    """
-    Return a list of user events that are ending after a specified time.
+    """Return a list of user events that are ending after a specified time.
 
-    Parameters:
-        event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z')
-        event.body.user_id (str): auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx')
+    Args:
+        event.body.time (str):
+            UTC datestring (eg. '2022-05-14T17:30:00Z').
+        event.body.user_id (str):
+            Auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx').
 
     Returns:
-        List of matching event objects
+        200 status code with list of matching event objects.
     """
 
     event_body = json.loads(event.get("body", ""))
@@ -500,43 +478,43 @@ def getUserEventsEndingAfterTime(event, context):
                 Key('creator_id').eq(user_id)
                 & Key('end').gte(time)
     )
-    return create_200_response(json.dumps(response['Items'], cls=DecimalEncoder))
+    return create_response(200, json.dumps(response['Items'], cls=DecimalEncoder))
 
 
 def getEventAtTime(event, context):
-    """
-    Return events that are happening at a given point in time.
+    """Return events that are happening at a given point in time.
 
-    Parameters: 
-        event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z')
-        event.body.site (str): sitecode (eg. 'saf')
+    Args: 
+        event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z').
+        event.body.site (str): Sitecode (eg. 'saf').
     
     Returns:
-        List of matching event objects
+        200 status code with list of matching event objects.
     """
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(calendar_table_name)
     print("event body:")
     print(event_body)
 
     time = event_body["time"]
     site = event_body["site"]
     events = getEventsDuringTime(time, site)
-    return create_200_response(json.dumps(events))
+    return create_response(200, json.dumps(events))
       
 
 def isUserScheduled(event, context):
-    """
-    Check if a user is scheduled for an event at a specific site and time.
+    """Check if a user is scheduled for an event at a specific site and time.
 
-    Parameters:
-        event.body.user_id (str): auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx')
-        event.body.site (str): site code (eg. 'saf')
-        event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z')
+    Args:
+        event.body.user_id (str):
+            Auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx').
+        event.body.site (str):
+            Sitecode (eg. 'saf').
+        event.body.time (str):
+            UTC datestring (eg. '2022-05-14T17:30:00Z').
 
     Returns:
-        List of allowed users for an event
+        A 200 status code with a list of allowed users for an event.
     """
    
     event_body = json.loads(event.get("body", ""))
@@ -550,22 +528,26 @@ def isUserScheduled(event, context):
     events = getEventsDuringTime(time, site)
     allowed_users = [event["creator_id"] for event in events]
     print(f"Allowed users: {allowed_users}")
-    return create_200_response(user in allowed_users)
+    return create_response(200, user in allowed_users)
 
 
 def doesConflictingEventExist(event, context):
-    """
+    """Checks for existing calendar events at a given site and time.
+    
     Calendar events should only let the designated user use the observatory.
     If there are no reservations, anyone can use it. 
 
-    Parameters:
-        event.body.user_id (str): auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx')
-        event.body.site (str): sitecode (eg. 'saf')
-        event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z')
+    Args:
+        event.body.user_id (str):
+            Auth0 user 'sub' (eg. 'google-oauth2|xxxxxxxxxxxxx').
+        event.body.site (str):
+            Sitecode (eg. 'saf').
+        event.body.time (str):
+            UTC datestring (eg. '2022-05-14T17:30:00Z').
 
     Returns:
-        True if a different user has a reservation at the specified time.
-        False otherwise.
+        200 status code. bool: True if a different user has a reservation
+        at the specified time. False otherwise.
     """
 
     event_body = json.loads(event.get("body", ""))
@@ -582,8 +564,8 @@ def doesConflictingEventExist(event, context):
     # If any events belong to a different user, return True (indicating conflict)
     for event in events:
         if event["creator_id"] != user:
-            return create_200_response(True)
+            return create_response(200, True)
 
     # Otherwise, report no conflicts (return False)
-    return create_200_response(False)
+    return create_response(200, False)
  
