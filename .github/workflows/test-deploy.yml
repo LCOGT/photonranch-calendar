@@ -19,7 +19,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: 3.9
+        python-version: 3.7
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
@@ -66,7 +66,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: 3.9
+        python-version: 3.7
 
     - name: Install Serverless Plugins and Deploy
       uses: serverless/github-action@v3.1
