@@ -5,7 +5,7 @@ on:
       - test
 
 jobs:
-  unit-test:
+  run-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Check out repository
@@ -28,49 +28,23 @@ jobs:
 #      run: |
 #        python -m pytest
 
-  deploy-test:
+  deploy-test-stage:
 #    needs: unit-test
+    name: deploy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16.x]
     steps:
-    
-    - uses: actions/checkout@v1
-
-    - name: Create public_key file
-      run: |
-        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
-        -----BEGIN CERTIFICATE-----
-        ${{ secrets.AUTH0_PUBLIC_KEY }}
-        -----END CERTIFICATE-----
-        EOF
-        
-    - name: Create Auth0 secrets file
-      run: |
-        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/secrets.json << EOF
-        {
-          "AUTH0_CLIENT_ID": "${{ secrets.AUTH0_CLIENT_ID }}"
-        }
-        EOF
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v1
+    - uses: actions/checkout@v3
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
       with:
-        aws-access-key-id: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
-        
-    - name: Set up Node
-      uses: actions/setup-node@v1
+        node-version: ${{ matrix.node-version }}
+    - run: npm ci
+    - name: serverless deploy
+      uses: serverless/github-action@v3.1
       with:
-        node-version: 16.14.0
-
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.9  
-
-    - name: Serverless Deploy
-      run: npx serverless deploy --stage test
+        args: deploy
       env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
-     
+        SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
