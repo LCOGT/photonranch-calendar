@@ -35,9 +35,11 @@ custom:
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
-    dockerizePip: true
+    dockerizePip: non-linux
+    dockerFile: serverless-deploy-helpers/Dockerfile
     useDownloadCache: false 
     useStaticCache: false
+    slim: true
 
   customDomain:
     domainName: 'calendar.photonranch.org'
@@ -49,7 +51,7 @@ custom:
 provider:
   name: aws
   stage: ${opt:stage, "test"}
-  runtime: python3.9
+  runtime: python3.7
   region: us-east-1
   environment: 
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
