@@ -5,8 +5,8 @@ service: calendar-backend
 
 package:
   patterns:
-    - venv/**
-    - node_modules/**
+    - '!venv/**'
+    - '!node_modules/**'
 
 plugins:
   - serverless-python-requirements
@@ -33,7 +33,6 @@ custom:
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
     dockerizePip: true
-    dockerImage: public.ecr.aws/lambda/python:3.9
     useDownloadCache: false
     useStaticCache: false
 
@@ -47,7 +46,7 @@ custom:
 provider:
   name: aws
   stage: ${opt:stage, "test"}
-  runtime: python3.9
+  runtime: python3.7
   region: us-east-1
   environment: 
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}

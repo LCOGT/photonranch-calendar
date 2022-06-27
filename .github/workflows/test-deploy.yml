@@ -77,7 +77,7 @@ jobs:
     - name: Serverless Deploy
       uses: serverless/github-action@v3.1
       with:
-        args: -c "deploy --stage test --verbose"
+        args: -c "serverless deploy --stage test --verbose"
         entrypoint: /bin/sh
       env:
         SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
