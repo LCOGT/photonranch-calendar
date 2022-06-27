@@ -3,18 +3,15 @@ app: photonranch
 
 service: calendar-backend
 
-
 package:
   patterns:
     - venv/**
     - node_modules/**
 
-
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
   - serverless-domain-manager
-
 
 # Enable point-in-time-recovery
 custom:
@@ -36,6 +33,7 @@ custom:
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
     dockerizePip: true
+    dockerImage: public.ecr.aws/lambda/python:3.9
     useDownloadCache: false
     useStaticCache: false
 
