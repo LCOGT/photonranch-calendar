@@ -75,7 +75,7 @@ jobs:
         entrypoint: /bin/sh
 
     - name: Serverless Deploy
-      uses: serverless/github-actions@v3.1
+      uses: serverless/github-action@v3.1
       with:
         args: -c "deploy --stage test --verbose"
         entrypoint: /bin/sh
