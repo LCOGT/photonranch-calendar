@@ -68,11 +68,11 @@ jobs:
       with:
         python-version: 3.9
     
-    - run: npm ci
     - name: Serverless Deploy
-      uses: dhollerbach/actions.serverless-with-python-requirements@master
-      with:
-        args: '--stage test'
+      run: npx serverless deploy --stage test
+      #uses: dhollerbach/actions.serverless-with-python-requirements@master
+      #with:
+      #  args: '--stage test'
         #args: -c "serverless plugin install --name serverless-python-requirements && serverless plugin install --name serverless-domain-manager && serverless plugin install --name serverless-dynamodb-pitr && serverless deploy --stage test"
         #entrypoint: /bin/sh
       env:
