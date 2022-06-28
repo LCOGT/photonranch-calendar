@@ -80,4 +80,6 @@ jobs:
         #args: -c "serverless plugin install --name serverless-python-requirements && serverless plugin install --name serverless-domain-manager && serverless plugin install --name serverless-dynamodb-pitr && serverless deploy --stage test"
       #  entrypoint: /bin/sh
       env:
-        SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        #SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
