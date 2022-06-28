@@ -69,7 +69,7 @@ jobs:
         python-version: 3.9
     
     - name: Install Plugins
-      run: serverless plugin install --name serverless-python-requirements
+      run: npx serverless plugin install --name serverless-python-requirements
     - name: Serverless Deploy
       run: npx serverless deploy --stage test
       #uses: dhollerbach/actions.serverless-with-python-requirements@master
