@@ -68,6 +68,8 @@ jobs:
       with:
         python-version: 3.9
     
+    - name: Set up Environment
+      run: npm ci
     - name: Install Plugins
       run: npx serverless plugin install --name serverless-python-requirements
     - name: Serverless Deploy
