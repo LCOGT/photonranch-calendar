@@ -2,7 +2,9 @@
 
 This repository manages the backend service for the calendar at www.photonranch.org. Communication between the web interface and calendar database operations at AWS occur here.
 
-This is a Serverless API deployed by the Serverless Framework, which creates and runs the Python functions in `handler.py` in AWS Lambda.  
+This is a Serverless API deployed by the Serverless Framework, which creates and runs the Python functions in `handler.py` in AWS Lambda.
+
+![Photon Ranch Calendar interface](images/calendar-screenshot.PNG)
 
 ## Description
 
@@ -13,7 +15,7 @@ The Photon Ranch calendar allows authenticated users to create and manage reserv
 - Add or remove a [project](https://github.com/LCOGT/photonranch-projects) to a reservation
 - Delete a reservation from the calendar
 
-![Photon Ranch Calendar](images/calendar-screenshot.PNG)
+![Reserving a real-time session on the Photon Ranch Calendar](images/calendar-create-reservation.PNG)
 
 ## Dependencies
 
