@@ -69,11 +69,11 @@ jobs:
         python-version: 3.9
     
     - name: Serverless Deploy
-      run: npx serverless deploy --stage test
+      run: -c "serverless plugin install --name serverless-python-requirements && npx serverless deploy --stage test"
       #uses: dhollerbach/actions.serverless-with-python-requirements@master
-      #with:
+      with:
       #  args: '--stage test'
         #args: -c "serverless plugin install --name serverless-python-requirements && serverless plugin install --name serverless-domain-manager && serverless plugin install --name serverless-dynamodb-pitr && serverless deploy --stage test"
-        #entrypoint: /bin/sh
+        entrypoint: /bin/sh
       env:
         SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
