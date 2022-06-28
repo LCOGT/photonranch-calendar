@@ -38,11 +38,16 @@ You will need the [Serverless Framework](https://www.serverless.com/framework/do
 
 ### Deployment
 
-Changes pushed to the test, dev, and main branches are automatically deployed to the corresponding test, dev, and production stages with Github Actions. For manual deployment on your local machine, you'll need to fill out the `public_key` and `secrets.json` with the required information. Then, run:
+Changes pushed to the test, dev, and main branches are automatically deployed to the corresponding test, dev, and production stages with Github Actions. For manual deployment on your local machine, you'll first need to fill out the `public_key` and `secrets.json` with the required information, and install packages:
 
 ```
 npm install
 serverless plugin install --name serverless-python-requirements
+```
+
+To deploy, run:
+
+```
 serverless deploy --stage {stage}
 ```
 
