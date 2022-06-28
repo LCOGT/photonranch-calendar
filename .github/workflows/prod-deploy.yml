@@ -28,7 +28,7 @@ jobs:
 #      run: |
 #        python -m pytest
 
-   deploy-prod:
+  deploy-prod:
     needs: run-tests
     runs-on: ubuntu-latest
   
