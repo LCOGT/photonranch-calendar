@@ -13,13 +13,17 @@ The Photon Ranch calendar allows authenticated users to create and manage reserv
 - Add or remove a [project](https://github.com/LCOGT/photonranch-projects) to a reservation
 - Delete a reservation from the calendar
 
+![Photon Ranch Calendar](images/calendar-screenshot.PNG)
+
 ## Dependencies
 
 This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`. A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
 
+To update npm dependencies, run `npm update`. This will update the package versions in `package-lock.json`.
+
 ## Local Development
 
-First, clone the repository:
+Clone the repository to your local machine:
 
 ```
 git clone https://github.com/LCOGT/photonranch-calendar.git
@@ -28,16 +32,19 @@ cd photonranch-calendar
 
 ### Requirements
 
-You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your credentials.
+You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your own AWS credentials.
 
 ### Deployment
 
-Changes pushed to the test, dev, and main branches are automatically deployed with Github Actions. For manual deployment, you'll need to fill out the `public_key` and `secrets.json` with the required information. Then, run:
+Changes pushed to the test, dev, and main branches are automatically deployed to the corresponding test, dev, and production stages with Github Actions. For manual deployment on your local machine, you'll need to fill out the `public_key` and `secrets.json` with the required information. Then, run:
 
 ```
 npm install
+serverless plugin install --name serverless-python-requirements
 serverless deploy --stage {stage}
 ```
+
+In the case that a Serverless or AWS key has been reset, you will need to update these manually in this repository's settings for Github Actions to continue deploying. You must be a repository collaborator to edit these.
 
 ### Testing
 
@@ -160,3 +167,5 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org/
   - Responses:
     - 200: true if conflicting events from a different user exist at the same time.
     - 200: false if no conflicting events exist.
+
+## License

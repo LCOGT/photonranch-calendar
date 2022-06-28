@@ -5,7 +5,7 @@ on:
       - dev
       
 jobs:
-  unit-test:
+  run-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Check out repository
@@ -29,12 +29,12 @@ jobs:
 #        python -m pytest
 
   deploy-dev:
-#    needs: unit-test
+    needs: run-tests
     runs-on: ubuntu-latest
+  
     steps:
     
     - uses: actions/checkout@v1
-
     - name: Create public_key file
       run: |
         cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
@@ -59,18 +59,22 @@ jobs:
         aws-region: us-east-1
         
     - name: Set up Node
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v3
       with:
-        node-version: 16.14.0
+        node-version: 16.x
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: 3.9
-
+    
+    - name: Set up Environment
+      run: npm ci
+    - name: Install Plugins
+      run: npx serverless plugin install --name serverless-python-requirements && npx serverless plugin install --name serverless-domain-manager serverless-domain-manager && npx serverless plugin install --name serverless-dynamodb-pitr
     - name: Serverless Deploy
-      uses: dhollerbach/github-action-serverless-with-python-requirements@master
-      with:
-        args: '--stage dev'
+      run: npx serverless deploy --stage dev
       env:
         SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
