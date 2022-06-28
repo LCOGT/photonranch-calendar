@@ -71,7 +71,7 @@ jobs:
     - name: Set up Environment
       run: npm ci
     - name: Install Plugins
-      run: npx serverless plugin install --name serverless-python-requirements
+      run: npx serverless plugin install --name serverless-python-requirements && npx serverless plugin install --name serverless-domain-manager serverless-domain-manager && serverless plugin install --name serverless-dynamodb-pitr
     - name: Serverless Deploy
       run: npx serverless deploy --stage test
       #uses: dhollerbach/actions.serverless-with-python-requirements@master
