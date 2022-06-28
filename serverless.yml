@@ -32,7 +32,8 @@ custom:
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
-    dockerizePip: non-linux
+    dockerizePip: true
+    dockerImage: nikolaik/python-nodejs:python3.10-nodejs16-slim
     useDownloadCache: false
     useStaticCache: false
 
@@ -46,7 +47,7 @@ custom:
 provider:
   name: aws
   stage: ${opt:stage, "test"}
-  runtime: python3.7
+  runtime: python3.10
   region: us-east-1
   environment: 
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
