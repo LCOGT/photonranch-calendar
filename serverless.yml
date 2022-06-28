@@ -32,7 +32,7 @@ custom:
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
-    dockerizePip: true
+    dockerizePip: non-linux
     useDownloadCache: false
     useStaticCache: false
 
