@@ -4,9 +4,9 @@ app: photonranch
 service: calendar-backend
 
 package:
-  exclude:
-    - venv/**
-    - node_modules/**
+  patterns:
+    - '!venv/**'
+    - '!node_modules/**'
 
 plugins:
   - serverless-python-requirements
@@ -15,20 +15,25 @@ plugins:
 
 # Enable point-in-time-recovery
 custom:
+
+  # Define the name for the calendar dynamodb table
+  calendarTableName: calendar-${self:custom.stage.${self:provider.stage}}
+
   pitr:
-    - tableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+    - tableName: ${self:custom.calendarTableName}
       enabled: true
 
   # This is the 'variable' for the customDomain.basePath value, based on the stage.
   # Run as `sls deploy --stage <stage_name>`
   stage:
+    prod: calendar
     dev: dev
-    test: test 
+    test: test
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
   pythonRequirements:
-    dockerizePip: true
-    useDownloadCache: false 
+    dockerizePip: non-linux
+    useDownloadCache: false
     useStaticCache: false
 
   customDomain:
@@ -41,23 +46,27 @@ custom:
 provider:
   name: aws
   stage: ${opt:stage, "test"}
-  runtime: python3.7
+  runtime: python3.9
   region: us-east-1
   environment: 
-    DYNAMODB_CALENDAR: photonranch-calendar
+    DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
-  iamRoleStatements:
-    - Effect: Allow 
-      Action: 
-        - "dynamodb:PutItem"
-        - "dynamodb:GetItem"
-        - "dynamodb:UpdateItem"
-        - "dynamodb:DeleteItem"
-        - "dynamodb:Scan"
-        - "dynamodb:Query"
-      Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_CALENDAR}*"
+    STAGE: ${self:custom.stage.${self:provider.stage}}
+  iam:
+    role:
+      statements:
+        - Effect: Allow 
+          Action: 
+            - "dynamodb:PutItem"
+            - "dynamodb:GetItem"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+            - "dynamodb:Scan"
+            - "dynamodb:Query"
+          Resource:
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
+
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -105,10 +114,10 @@ resources: # CloudFormation template syntax from here on.
         StatusCode: '401'
 
     # Define the dynamodb table we use to store calendar events
-    messagesTable: 
+    calendarTable: 
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:provider.environment.DYNAMODB_CALENDAR}
+        TableName: ${self:custom.calendarTableName}
         AttributeDefinitions:
           - AttributeName: event_id
             AttributeType: S
@@ -151,6 +160,7 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+
 
 functions:
   authorizerFunc: 

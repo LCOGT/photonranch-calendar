@@ -1,0 +1,81 @@
+name: Deploy Production Stage
+on:
+  push:
+    branches:
+      - main 
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v1
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+#    - name: Run unit tests 
+#      run: |
+#        python -m pytest
+
+  deploy-prod:
+    # Only run on creation of a new tag
+    if: github.event_name == 'create' && github.event.ref_type == 'tag' && github.event.repository.fork == false
+    needs: run-tests
+    runs-on: ubuntu-latest
+  
+    steps:
+    
+    - uses: actions/checkout@v1
+    - name: Create public_key file
+      run: |
+        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
+        -----BEGIN CERTIFICATE-----
+        ${{ secrets.AUTH0_PUBLIC_KEY }}
+        -----END CERTIFICATE-----
+        EOF
+        
+    - name: Create Auth0 secrets file
+      run: |
+        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/secrets.json << EOF
+        {
+          "AUTH0_CLIENT_ID": "${{ secrets.AUTH0_CLIENT_ID }}"
+        }
+        EOF
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Set up Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16.x
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+    
+    - name: Set up Environment
+      run: npm ci
+    - name: Install Plugins
+      run: npx serverless plugin install --name serverless-python-requirements && npx serverless plugin install --name serverless-domain-manager serverless-domain-manager && npx serverless plugin install --name serverless-dynamodb-pitr
+    - name: Serverless Deploy
+      run: npx serverless deploy --stage prod
+      env:
+        SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}

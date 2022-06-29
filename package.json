@@ -1,12 +1,11 @@
 {
   "name": "calendar-backend",
-  "description": "",
-  "version": "0.1.0",
+  "description": "Backend services for calendar requests",
+  "version": "0.1.1",
   "dependencies": {
-    "serverless-domain-manager": "^4.1.1",
-    "serverless-dynamodb-pitr": "^0.1.1"
-  },
-  "devDependencies": {
-    "serverless-python-requirements": "^5.0.1"
+    "serverless": "3.19.0",
+    "serverless-domain-manager": "6.0.3",
+    "serverless-dynamodb-pitr": "^0.1.1",
+    "serverless-python-requirements": "^5.4.0"
   }
 }
