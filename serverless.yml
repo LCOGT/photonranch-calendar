@@ -13,12 +13,12 @@ plugins:
   - serverless-dynamodb-pitr
   - serverless-domain-manager
 
-# Enable point-in-time-recovery
 custom:
 
   # Define the name for the calendar dynamodb table
   calendarTableName: calendar-${self:custom.stage.${self:provider.stage}}
 
+  # Enable point-in-time-recovery for dynamodb
   pitr:
     - tableName: ${self:custom.calendarTableName}
       enabled: true
