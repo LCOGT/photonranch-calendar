@@ -38,9 +38,9 @@ jobs:
     - name: Create public_key file
       run: |
         cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
-        -----BEGIN CERTIFICATE-----
+        -----BEGIN PUBLIC KEY-----
         ${{ secrets.AUTH0_PUBLIC_KEY }}
-        -----END CERTIFICATE-----
+        -----END PUBLIC KEY-----
         EOF
         
     - name: Create Auth0 secrets file
