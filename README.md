@@ -17,6 +17,8 @@ The Photon Ranch calendar allows authenticated users to create and manage reserv
 
 ![Reserving a real-time session on the Photon Ranch Calendar](images/calendar-create-reservation.PNG)
 
+### Architecture
+
 ## Dependencies
 
 This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`. A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
@@ -79,7 +81,7 @@ The body of a calendar event follows the JSON format below:
 
 ## API Endpoints
 
-Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is the deployment stage in ["test", "dev", "prod"].
+Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is the deployment stage in ["test", "dev", "calendar"].
 
 - POST `/newevent`
   - Description: Create a new reservation on the calendar.
