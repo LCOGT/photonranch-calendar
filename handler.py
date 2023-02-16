@@ -108,7 +108,14 @@ def getProject(project_name, created_at):
         Requested project details JSON, if response code 200.
     """
 
-    url = f"https://projects.photonranch.org/{str(os.getenv(STAGE))}/get-project"
+    # Use the same projects deployment as the one running the calendar.
+    # E.g. The dev calendar backend will call the dev projects backend
+    stage = os.getenv('STAGE')
+    # The production projects url replaces 'prod' with 'projects' in the url
+    if stage == 'prod':
+        stage = 'projects'
+
+    url = f"https://projects.photonranch.org/{stage}/get-project"
     body = json.dumps({
         "project_name": project_name,
         "created_at": created_at,
