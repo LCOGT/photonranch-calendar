@@ -21,7 +21,8 @@ The Photon Ranch calendar allows authenticated users to create and manage reserv
 
 ## Dependencies
 
-This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`. A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
+This application currently runs under Python 3.9. Serverless requirements for deployment are listed in `package.json`.
+A list of Python dependencies, which the `serverless-python-requirements` plugin zips for the Lambda environment, can be found in `requirements.txt`.
 
 To update npm dependencies, run `npm update`. This will update the package versions in `package-lock.json`.
 
@@ -29,37 +30,47 @@ To update npm dependencies, run `npm update`. This will update the package versi
 
 Clone the repository to your local machine:
 
-```
-git clone https://github.com/LCOGT/photonranch-calendar.git
-cd photonranch-calendar
+```bash
+$ git clone https://github.com/LCOGT/photonranch-calendar.git
+$ cd photonranch-calendar
 ```
 
 ### Requirements
 
-You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development. For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/), [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configuring with your own AWS credentials.
+You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) installed locally for development.
+For manual deployment to AWS as well as for updating dependencies, you will need to install [Node](https://nodejs.org/en/),
+[npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm),
+and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
+configuring with your own AWS credentials.
 
 ### Deployment
 
-Changes pushed to the test, dev, and main branches are automatically deployed to the corresponding test, dev, and production stages with Github Actions. For manual deployment on your local machine, you'll first need to fill out the `public_key` and `secrets.json` with the required information, and install packages:
+Changes to the main and dev branches are automatically deployed to the corresponding prod and dev stages with Github Actions.
+It is recommended to use this as the primary way to deploy changes.
+For manual deployment on your local machine, you'll first need to fill out the `public_key` and `secrets.json` with the
+required information, and install packages:
 
-```
-npm install
-serverless plugin install --name serverless-python-requirements
+```shell
+$ npm install
+$ serverless plugin install --name serverless-python-requirements
+$ serverless plugin install --name serverless-dynamodb-pitr
+$ serverless plugin install --name serverless-domain-manager
 ```
 
 To deploy, run:
 
-```
-serverless deploy --stage {stage}
+```bash
+$ serverless deploy --stage {stage}
 ```
 
-In the case that a Serverless or AWS key has been reset, you will need to update these manually in this repository's settings for Github Actions to continue deploying. You must be a repository collaborator to edit these.
+In the case that a Serverless or AWS key has been reset, you will need to update these manually in this repository's
+settings for Github Actions to continue deploying. You must be a repository collaborator to edit these.
 
 ### Testing
 
 Instructions to manually run tests will be detailed here.
 
-## Calendar Event Syntax 
+## Calendar Event Syntax
 
 The body of a calendar event follows the JSON format below:
 
@@ -81,7 +92,7 @@ The body of a calendar event follows the JSON format below:
 
 ## API Endpoints
 
-Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is the deployment stage in ["test", "dev", "calendar"].
+Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is `dev` for the dev environment, or `calendar` for the production version.
 
 - POST `/newevent`
   - Description: Create a new reservation on the calendar.
@@ -176,5 +187,3 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org/
   - Responses:
     - 200: true if conflicting events from a different user exist at the same time.
     - 200: false if no conflicting events exist.
-
-## License
