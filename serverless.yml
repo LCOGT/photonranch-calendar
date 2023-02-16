@@ -1,7 +1,8 @@
 org: photonadmin # Corresponds to the serverless.com account used for monitoring
 app: photonranch
 
-service: calendar-backend
+#service: calendar-backend
+service: photonranch-calendar
 
 package:
   patterns:
@@ -17,7 +18,7 @@ plugins:
 custom:
 
   # Define the name for the calendar dynamodb table
-  calendarTableName: calendar-${self:custom.stage.${self:provider.stage}}
+  calendarTableName: calendar-${self:provider.stage}
 
   pitr:
     - tableName: ${self:custom.calendarTableName}
