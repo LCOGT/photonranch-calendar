@@ -1,7 +1,6 @@
 org: photonadmin # Corresponds to the serverless.com account used for monitoring
 app: photonranch
 
-#service: calendar-backend
 service: photonranch-calendar
 
 package:
