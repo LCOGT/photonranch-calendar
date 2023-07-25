@@ -1,6 +1,6 @@
 asn1crypto==1.5.1
 boto3==1.24.18
-certifi==2022.6.15
+certifi==2023.7.22
 cffi==1.15.0
 chardet==5.0.0
 cryptography==3.3.1
