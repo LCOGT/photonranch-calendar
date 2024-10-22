@@ -22,7 +22,7 @@ jobs:
         python-version: 3.9
     
     - name: Install Serverless Framework
-      run: npm install -g serverless
+      run: npm install -g serverless@^3
 
     # public_key and secrets.json both used for api auth guards using Auth0
     - name: Create public_key file
