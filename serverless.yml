@@ -64,6 +64,7 @@ provider:
             - "dynamodb:DeleteItem"
             - "dynamodb:Scan"
             - "dynamodb:Query"
+            - "dynamodb:DescribeTable"
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
 
