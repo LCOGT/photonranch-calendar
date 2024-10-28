@@ -443,7 +443,7 @@ def clearExpiredSchedule(event, context):
     """
     event_body = json.loads(event.get("body", ""))
     remove_expired_scheduler_events(event_body["cutoff_time"], event_body["site"])
-    return create_response(200)
+    return create_response(200, "success")
 
 
 def getSiteEventsInDateRange(event, context):
