@@ -84,6 +84,7 @@ The body of a calendar event follows the JSON format below:
     "site": "saf",  // Sitecode where reservation was made
     "title": "My Name",  // Name of reservation, defaults to username
     "reservation_type": "realtime",  // String, can be "realtime" or "project"
+    "origin": "ptr", // "ptr" if created on the ptr site, or "lco" if the event was created by the lco scheduler
     "resourceId": "saf",  // Sitecode where reservation was made
     "project_id": "none",  // Or concatenated string of project_name#created_at timestamp
     "reservation_note": "",  // User-supplied comment string, can be empty
