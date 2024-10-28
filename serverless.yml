@@ -65,6 +65,7 @@ provider:
             - "dynamodb:Scan"
             - "dynamodb:Query"
             - "dynamodb:DescribeTable"
+            - "dynamodb:BatchWriteItem"
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
 
