@@ -77,8 +77,8 @@ The body of a calendar event follows the JSON format below:
 ```javascript
 {
     "event_id": "024242f...",  // Unique ID generated for each new reservation
-    "start": "2022-06-20T06:15:00Z",  // Starting UTC date and time of reservation
-    "end": "2022-06-20T06:45:00Z",  // Ending UTC date and time of reservation
+    "start": "2022-06-20T16:15:00Z",  // Starting UTC date and time of reservation
+    "end": "2022-06-20T16:45:00Z",  // Ending UTC date and time of reservation
     "creator": "Firstname Lastname",  // String of user display name
     "creator_id": "google-oauth2|xxxxxxxxxxxxx",  // Auth0 user 'sub' string
     "site": "saf",  // Sitecode where reservation was made
@@ -93,6 +93,8 @@ The body of a calendar event follows the JSON format below:
 ## API Endpoints
 
 Calendar requests are handled at the base URL `https://calendar.photonranch.org/{stage}`, where `{stage}` is `dev` for the dev environment, or `calendar` for the production version.
+
+All datetimes should be formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
 
 - POST `/newevent`
   - Description: Create a new reservation on the calendar.
@@ -124,6 +126,17 @@ Calendar requests are handled at the base URL `https://calendar.photonranch.org/
   - Authorization required: No.
   - Request body:
     - `events` (array): dictionaries for each calendar event to update.
+  - Responses:
+    - 200: success.
+
+- POST `/remove-expired-lco-schedule`
+  - Description: Removes all events at a given site under the following conditions:
+    - the event `origin` == "lco"
+    - the event `start` is after (greater than) the specified cutoff_time
+  - Authorization required: No.
+  - Request body:
+    - `site` (string): dictionaries for each calendar event to update
+    - `cutoff_time` (string): UTC datestring, which is compared against the `start` attribute
   - Responses:
     - 200: success.
 
