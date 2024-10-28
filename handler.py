@@ -127,6 +127,43 @@ def getProject(project_name, created_at):
         return "Project not found."
 
 
+def remove_expired_scheduler_events(cutoff_time, site):
+    table = dynamodb.Table(calendar_table_name)
+    index_name = "site-end-index"
+    
+    # Query items from the secondary index with 'site' as the partition key and 'end' greater than the specified end_date
+    # We're using 'end' time for the query because it's part of a pre-existing GSI that allows for efficient queries. 
+    # But ultimately we want this to apply to events that start after the cutoff, so add that as a filter condition too.
+    query = table.query(
+        IndexName=index_name,
+        KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
+        FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time)
+    )
+    items = query.get('Items', [])
+    
+    # Extract key attributes for deletion (use the primary key attributes, not the index keys)
+    key_names = [k['AttributeName'] for k in table.key_schema]
+    
+    with table.batch_writer() as batch:
+        for item in items:
+            batch.delete_item(Key={k: item[k] for k in key_names if k in item})
+    
+    # Handle pagination if results exceed 1MB
+    while 'LastEvaluatedKey' in query:
+        query = table.query(
+            IndexName=index_name,
+            KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
+            FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time),
+            ExclusiveStartKey=query['LastEvaluatedKey']
+        )
+        items = query.get('Items', [])
+        
+        with table.batch_writer() as batch:
+            for item in items:
+                batch.delete_item(Key={k: item[k] for k in key_names if k in item})
+
+
+
 #=========================================#
 #=======       API Endpoints      ========#
 #=========================================#
@@ -391,6 +428,22 @@ def deleteEventById(event, context):
     message = json.dumps(response, indent=4, cls=DecimalEncoder)
     print(f"success deleting event, message: {message}")
     return create_response(200, message)
+
+def clearExpiredSchedule(event, context):
+    """Endpoint to delete calendar events with an event_id.
+
+    Args:
+        event.body.site (str):
+            sitecode for the site we are dealing with
+        event.body.time (str): 
+            UTC datestring (eg. '2022-05-14T17:30:00Z'). All events that start after this will be removed.
+
+    Returns:
+        200 status code
+    """
+    event_body = json.loads(event.get("body", ""))
+    remove_expired_scheduler_events(event_body["cutoff_time"], event_body["site"])
+    return create_response(200)
 
 
 def getSiteEventsInDateRange(event, context):

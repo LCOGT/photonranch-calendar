@@ -265,7 +265,13 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-
+  clearExpiredSchedule:
+    handler: handler.clearExpiredSchedule
+    events:
+      - http:
+          path: remove-expired-lco-schedule
+          method: post 
+          cors: true
   getSiteEventsInDateRange:
     handler: handler.getSiteEventsInDateRange
     events:
