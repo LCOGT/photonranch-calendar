@@ -3,6 +3,8 @@ name: Deploy Script
 on:
   push:
     branches: [main, dev]
+    paths-ignore:
+      - 'README.md'
       
 jobs:
   deploy:
