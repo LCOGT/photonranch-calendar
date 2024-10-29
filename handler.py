@@ -128,6 +128,24 @@ def getProject(project_name, created_at):
 
 
 def remove_expired_scheduler_events(cutoff_time, site):
+    """ Method for deleting calendar events created in response to the LCO scheduler.
+    
+    This method takes a site and a cutoff time, and deletes all events that satisfy the following conditions:
+        - the event belongs to the given site
+        - the event starts after the cutoff_time (specifically, the event start is greater than the cutoff_time)
+        - the event origin is 'lco'
+    It returns an array of project IDs that were associated with the deleted events so that they can be deleted as well. 
+
+    Args:
+        cutoff_time (str): 
+            Formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
+            Any events that start before this time are not deleted.
+        site (str): 
+            Only delete events from the given site (e.g. 'mrc')
+
+    Returns:
+        (array of str) project IDs for any projects that were connected to deleted events. 
+    """
     table = dynamodb.Table(calendar_table_name)
     index_name = "site-end-index"
     
@@ -161,6 +179,9 @@ def remove_expired_scheduler_events(cutoff_time, site):
         with table.batch_writer() as batch:
             for item in items:
                 batch.delete_item(Key={k: item[k] for k in key_names if k in item})
+
+    associated_projects = [x["project_id"] for x in items]
+    return associated_projects
 
 
 
@@ -439,11 +460,11 @@ def clearExpiredSchedule(event, context):
             UTC datestring (eg. '2022-05-14T17:30:00Z'). All events that start after this will be removed.
 
     Returns:
-        200 status code
+        200 status code, with list of projects that were associated with the deleted events
     """
     event_body = json.loads(event.get("body", ""))
-    remove_expired_scheduler_events(event_body["cutoff_time"], event_body["site"])
-    return create_response(200, "success")
+    associated_projects = remove_expired_scheduler_events(event_body["cutoff_time"], event_body["site"])
+    return create_response(200, json.dumps(associated_projects))
 
 
 def getSiteEventsInDateRange(event, context):
