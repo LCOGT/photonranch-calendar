@@ -50,7 +50,7 @@ def addNewEvent(event, context):
         # Add creation date
         event_body["last_modified"] = get_utc_iso_time()
 
-        result = create_calendar_event(event)
+        result = create_calendar_event(event_body)
 
         message = json.dumps({
             'table_response': result,
