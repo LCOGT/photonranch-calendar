@@ -47,8 +47,6 @@ class Observation:
         if observation["observation_type"] in ["RAPID_RESPONSE", "TIME_CRITICAL"]:
             event["project_prioirty"] = "time_critical"
 
-        event["site"] = "tst"
-        event["resourceId"] = "tst"
         self.calendar_event = event
 
     def _translate_to_project(self):
@@ -243,10 +241,10 @@ def clear_old_schedule(site, cutoff_time=None):
         FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time)
     )
     items = query.get('Items', [])
+    print(f"Removing expired scheduled events: {items}")
     
     # Extract key attributes for deletion (use the primary key attributes, not the index keys)
     key_names = [k['AttributeName'] for k in calendar_table.key_schema]
-    print(f"Removing expired scheduled events: {key_names}")
     
     with calendar_table.batch_writer() as batch:
         for item in items:
