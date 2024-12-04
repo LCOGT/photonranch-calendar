@@ -358,12 +358,12 @@ functions:
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
 
-    importSchedulesFromLCO:
-      handler: import_schedules.import_all_schedules
-      events:
-        - schedule:
-            rate: rate(5 minutes)
-            enabled: true
-        - http:
-            path: import-schedules
-            method: get
+  importSchedulesFromLCO:
+    handler: import_schedules.import_all_schedules
+    events:
+      - schedule:
+          rate: rate(5 minutes)
+          enabled: true
+      - http:
+          path: import-schedules
+          method: get
