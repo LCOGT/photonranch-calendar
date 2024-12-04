@@ -24,7 +24,7 @@ class Observation:
 
     def _translate_to_calendar(self):
         # we need the project_id, so do the project translation if it doesn't exist
-        if not self.project:
+        if not hasattr(self, 'project'):
             self._translate_to_project()
 
         observation = self.observation # just for readability
@@ -153,14 +153,14 @@ class Observation:
         self.project = project
 
     def create_calendar(self):
-        if not self.calendar_event:
+        if not hasattr(self, 'calendar_event'):
             self._translate_to_calendar()
         response = create_calendar_event(self.calendar_event) # this is an imported function
         print("Created new calendar event")
         return response
 
     def create_project(self):
-        if not self.project:
+        if not hasattr(self, 'project'):
             self._translate_to_project()
         url = get_projects_url('new-project')
         response = requests.post(url, json.dumps(self.project))
