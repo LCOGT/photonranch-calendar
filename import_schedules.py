@@ -39,7 +39,7 @@ class Observation:
             "project_priority": "standard",
             "reservation_note": "This event was created and scheduled by the LCO Scheduler",
             "reservation_type": "project",
-            "origin": "lco",
+            "origin": "LCO",
             "resourceId": observation["site"],
             "site": observation["site"],
             "title": f"{observation['name']} (via LCO)"
