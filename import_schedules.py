@@ -212,14 +212,14 @@ def clear_old_schedule(site, cutoff_time=None):
     
     This method takes a site and a cutoff time, and deletes all events that satisfy the following conditions:
         - the event belongs to the given site
-        - the event starts after the cutoff_time (specifically, the event start is greater than the cutoff_time)
-        - the event origin is 'lco'
+        - the event ends after the cutoff_time (specifically, the event end is greater than the cutoff_time)
+        - the event origin is 'LCO'
     Then it gathers a list of project IDs that were associated with the deleted events, and delete them too. 
 
     Args:
         cutoff_time (str): 
             Formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
-            Any events that start before this time are not deleted.
+            Any events that end before this time are not deleted.
         site (str): 
             Only delete events from the given site (e.g. 'mrc')
 
@@ -233,12 +233,10 @@ def clear_old_schedule(site, cutoff_time=None):
         
     
     # Query items from the secondary index with 'site' as the partition key and 'end' greater than the specified end_date
-    # We're using 'end' time for the query because it's part of a pre-existing GSI that allows for efficient queries. 
-    # But ultimately we want this to apply to events that start after the cutoff, so add that as a filter condition too.
     query = calendar_table.query(
         IndexName=index_name,
         KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
-        FilterExpression=Attr('origin').eq('LCO') & Attr('start').gt(cutoff_time)
+        FilterExpression=Attr('origin').eq('LCO')
     )
     items = query.get('Items', [])
     print(f"Removing expired scheduled events: {items}")
@@ -255,7 +253,7 @@ def clear_old_schedule(site, cutoff_time=None):
         query = calendar_table.query(
             IndexName=index_name,
             KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
-            FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time),
+            FilterExpression=Attr('origin').eq('LCO'),
             ExclusiveStartKey=query['LastEvaluatedKey']
         )
         items = query.get('Items', [])

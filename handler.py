@@ -231,9 +231,7 @@ def deleteEventById(event, context):
     print(f"userRoles: {userRoles}")
 
     # Check if the requester is an admin
-    requesterIsAdmin="false"
-    if 'admin' in userRoles:
-        requesterIsAdmin="true"
+    requesterIsAdmin = 'admin' in userRoles
     print(f"requesterIsAdmin: {requesterIsAdmin}")
 
     # Specify the event with our pk (eventId) and sk (startTime)
