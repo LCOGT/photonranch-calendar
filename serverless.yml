@@ -69,6 +69,11 @@ provider:
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
 
+        - Effect: Allow
+          Action:
+            - "ssm:GetParameter"
+          Resource:
+            - "arn:aws:ssm:${self:provider.region}:*:parameter/site-proxy-secret/*"
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -267,13 +272,6 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  clearExpiredSchedule:
-    handler: handler.clearExpiredSchedule
-    events:
-      - http:
-          path: remove-expired-lco-schedule
-          method: post 
-          cors: true
   getSiteEventsInDateRange:
     handler: handler.getSiteEventsInDateRange
     events:
@@ -359,3 +357,13 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
+
+    importSchedulesFromLCO:
+      handler: import_schedules.import_all_schedules
+      events:
+        - schedule:
+            rate: rate(5 minutes)
+            enabled: true
+        - http:
+            path: import-schedules
+            method: get

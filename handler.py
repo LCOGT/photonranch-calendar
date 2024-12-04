@@ -1,188 +1,15 @@
 import json
-import os
-import boto3
-import decimal
-import requests
-import datetime
-from boto3.dynamodb.conditions import Key, Attr
-from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
-
-dynamodb = boto3.resource('dynamodb')
-calendar_table_name = os.environ['DYNAMODB_CALENDAR']
-
-
-#=========================================#
-#=======     Helper Functions     ========#
-#=========================================#
-
-def create_response(status_code: int, message):
-    """Returns a given status code."""
-
-    return { 
-        'statusCode': status_code,
-        'headers': {
-            # Required for CORS support to work
-            'Access-Control-Allow-Origin': '*',
-            # Required for cookies, authorization headers with HTTPS
-            'Access-Control-Allow-Credentials': 'true',
-        },
-        'body': message
-    }
-
-
-class DecimalEncoder(json.JSONEncoder):
-    """Helper class to convert a DynamoDB item to JSON."""
-
-    def default(self, o):
-        if isinstance(o, set):
-            return list(o)
-        if isinstance(o, decimal.Decimal):
-            if o % 1 > 0:
-                return float(o)
-            else:
-                return int(o)
-        return super(DecimalEncoder, self).default(o)
-
-
-def get_utc_iso_time():
-    """Returns formatted UTC datetime string of current time."""
-
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def getEvent(eventId, eventStart):
-    """Returns details of a requested event from the calendar database."""
-
-    print(f'eventId: {eventId}')
-    print(f'eventStart: {eventStart}')
-    table = dynamodb.Table(calendar_table_name)
-    try: 
-        response = table.get_item(
-            Key={
-                'event_id': eventId,
-                'start': eventStart,
-            }
-        )
-        print(f"getEvent response: {response}")
-        return response['Item']
-    except Exception as e:
-        print(f"error with getEvent")
-        print(e)
-    return ''
-      
-
-def getEventsDuringTime(time, site):
-    """Gets calendar events at a site that are active during a given time.
-    
-    Args:
-        time (str): UTC datestring (eg. '2022-05-14T17:30:00Z').
-        site (str): sitecode (eg. 'saf').
-
-    Returns:
-        A list of event objects matching time and site criteria.
-    """
-
-    table = dynamodb.Table(calendar_table_name)
-    response = table.query(
-        IndexName="site-end-index",
-        KeyConditionExpression=
-                Key('site').eq(site)
-                & Key('end').gte(time),
-        FilterExpression=Key('start').lte(time)
-    )
-    print(f"Items during {time}: {response['Items']}")
-    return response['Items']
-
-
-def getProject(project_name, created_at):
-    """Get project details from the projects backend.
-
-    Args:
-        project_name (str):
-            Name of the project in the projects-{stage} database.
-        created_at (str):
-            UTC datestring at creation (eg. '2022-05-14T17:30:00Z').
-
-    Returns:
-        Requested project details JSON, if response code 200.
-    """
-
-    # Use the same projects deployment as the one running the calendar.
-    # E.g. The dev calendar backend will call the dev projects backend
-    stage = os.getenv('STAGE')
-    # The production projects url replaces 'prod' with 'projects' in the url
-    if stage == 'prod':
-        stage = 'projects'
-
-    url = f"https://projects.photonranch.org/{stage}/get-project"
-    body = json.dumps({
-        "project_name": project_name,
-        "created_at": created_at,
-    })
-    response = requests.post(url, body)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return "Project not found."
-
-
-def remove_expired_scheduler_events(cutoff_time, site):
-    """ Method for deleting calendar events created in response to the LCO scheduler.
-    
-    This method takes a site and a cutoff time, and deletes all events that satisfy the following conditions:
-        - the event belongs to the given site
-        - the event starts after the cutoff_time (specifically, the event start is greater than the cutoff_time)
-        - the event origin is 'lco'
-    It returns an array of project IDs that were associated with the deleted events so that they can be deleted as well. 
-
-    Args:
-        cutoff_time (str): 
-            Formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
-            Any events that start before this time are not deleted.
-        site (str): 
-            Only delete events from the given site (e.g. 'mrc')
-
-    Returns:
-        (array of str) project IDs for any projects that were connected to deleted events. 
-    """
-    table = dynamodb.Table(calendar_table_name)
-    index_name = "site-end-index"
-    
-    # Query items from the secondary index with 'site' as the partition key and 'end' greater than the specified end_date
-    # We're using 'end' time for the query because it's part of a pre-existing GSI that allows for efficient queries. 
-    # But ultimately we want this to apply to events that start after the cutoff, so add that as a filter condition too.
-    query = table.query(
-        IndexName=index_name,
-        KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
-        FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time)
-    )
-    items = query.get('Items', [])
-    
-    # Extract key attributes for deletion (use the primary key attributes, not the index keys)
-    key_names = [k['AttributeName'] for k in table.key_schema]
-    
-    with table.batch_writer() as batch:
-        for item in items:
-            batch.delete_item(Key={k: item[k] for k in key_names if k in item})
-    
-    # Handle pagination if results exceed 1MB
-    while 'LastEvaluatedKey' in query:
-        query = table.query(
-            IndexName=index_name,
-            KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
-            FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time),
-            ExclusiveStartKey=query['LastEvaluatedKey']
-        )
-        items = query.get('Items', [])
-        
-        with table.batch_writer() as batch:
-            for item in items:
-                batch.delete_item(Key={k: item[k] for k in key_names if k in item})
-
-    associated_projects = [x["project_id"] for x in items]
-    return associated_projects
-
+from utils import DecimalEncoder
+from utils import calendar_table
+from utils import create_response
+from utils import get_utc_iso_time
+from utils import create_calendar_event
+from utils import get_event_by_id
+from utils import get_events_during_time
+from utils import get_project
+from utils import delete_calendar_event
 
 
 #=========================================#
@@ -207,7 +34,6 @@ def addNewEvent(event, context):
 
     try:
         event_body = json.loads(event.get("body", ""))
-        table = dynamodb.Table(calendar_table_name)
 
         print("event_body:")
         print(event_body)
@@ -224,10 +50,10 @@ def addNewEvent(event, context):
         # Add creation date
         event_body["last_modified"] = get_utc_iso_time()
 
-        table_response = table.put_item(Item=event_body)
+        result = create_calendar_event(event)
 
         message = json.dumps({
-            'table_response': table_response,
+            'table_response': result,
             'new_calendar_event': event_body,
         })
         return create_response(200, message)
@@ -259,7 +85,6 @@ def modifyEvent(event, context):
         403 status code if user is unauthorized.
     """
 
-    table = dynamodb.Table(calendar_table_name)
     event_body = json.loads(event.get("body", ""))
 
     originalEvent = event_body['originalEvent']
@@ -269,28 +94,23 @@ def modifyEvent(event, context):
     originalStart = originalEvent['start']
 
     # Make sure the user is admin, or modifying their own event
-    creatorId = getEvent(originalId, originalStart)['creator_id']
+    creatorId = get_event_by_id(originalId, originalStart)['creator_id']
     userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
     userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
     if creatorId != userMakingThisRequest and 'admin' not in userRoles:
         return create_response(403, "You may only modify your own events.")
 
     # Delete and recreate the item since start time is the sort key for our table
-    delRes = table.delete_item(
-        Key={
-            'event_id': originalId,
-            'start': originalStart,
-        }
-    )
-    print(f"delete response: {delRes}")
+    delete_res = delete_calendar_event(originalId, originalStart)
+    print(f"delete response: {delete_res}")
     # Ensure the eventId and creator do not change
     modifiedEvent['event_id'] = originalId
     modifiedEvent['creator_id'] = creatorId
 
     # Update last modified time
     modifiedEvent['last_modified'] = get_utc_iso_time()
-    response = table.put_item(Item=modifiedEvent)
-    print(f"put response: {response}")
+    response = create_calendar_event(modifiedEvent)
+    print(f"create response: {response}")
     return create_response(200, json.dumps(response))
 
 
@@ -311,7 +131,6 @@ def addProjectsToEvents(event, context):
     """
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(calendar_table_name)
 
     print("event")
     print(json.dumps(event))
@@ -321,7 +140,7 @@ def addProjectsToEvents(event, context):
 
     responses = []
     for event in events:
-        resp = table.update_item(
+        resp = calendar_table.update_item(
             Key={
                 "event_id": event["event_id"],
                 "start": event["start"],
@@ -350,7 +169,6 @@ def removeProjectFromEvents(event, context):
     """
 
     request_body = json.loads(event.get("body"))
-    table = dynamodb.Table(calendar_table_name)
 
     events = request_body['events']
     print(request_body)
@@ -359,7 +177,7 @@ def removeProjectFromEvents(event, context):
 
         # Get the start value from the event with given event_id
         # We need both values to do an update_item operation
-        query_response = table.query(
+        query_response = calendar_table.query(
             Key={
                 "event_id": event_id,
             }
@@ -368,7 +186,7 @@ def removeProjectFromEvents(event, context):
         start = query_response['Items'][0]['start']
 
         # Update the item, setting the project_id to 'none'
-        update_response = table.update_item(
+        update_response = calendar_table.update_item(
             Key={
                 "event_id": event_id,
                 "start": start,
@@ -405,15 +223,11 @@ def deleteEventById(event, context):
     """
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(calendar_table_name)
-
-    print("event")
-    print(json.dumps(event))
 
     # Get the user's roles provided by the lambda authorizer
     userMakingThisRequest = event["requestContext"]["authorizer"]["principalId"]
-    print(f"userMakingThisRequest: {userMakingThisRequest}")
     userRoles = json.loads(event["requestContext"]["authorizer"]["userRoles"])
+    print(f"userMakingThisRequest: {userMakingThisRequest}")
     print(f"userRoles: {userRoles}")
 
     # Check if the requester is an admin
@@ -422,49 +236,16 @@ def deleteEventById(event, context):
         requesterIsAdmin="true"
     print(f"requesterIsAdmin: {requesterIsAdmin}")
 
-    # Specify the event with our pk (eventToDelete) and sk (startTime)
-    eventToDelete = event_body['event_id']
+    # Specify the event with our pk (eventId) and sk (startTime)
+    eventId = event_body['event_id']
     startTime = event_body['start']
 
-    try:
-        response = table.delete_item(
-            Key={
-                'event_id': eventToDelete,
-                'start': startTime
-            },
-            ConditionExpression=":requesterIsAdmin = :true OR creator_id = :requester_id",
-            ExpressionAttributeValues = {
-                ":requester_id": userMakingThisRequest, 
-                ":requesterIsAdmin": requesterIsAdmin,
-                ":true": "true"
-            }
-        )
-    except ClientError as e:
-        print(f"error deleting event: {e}")
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            print(e.response['Error']['Message'])
-            return create_response(403, "You may only modify your own events.")
-        return create_response(403, e.response['Error']['Message'])
+    result = delete_calendar_event(eventId, startTime, userMakingThisRequest, requesterIsAdmin)
+    if result is None:
+        return create_response(403, "You may only modify your own events.")
     
-    message = json.dumps(response, indent=4, cls=DecimalEncoder)
-    print(f"success deleting event, message: {message}")
+    message = json.dumps(result, indent=4, cls=DecimalEncoder)
     return create_response(200, message)
-
-def clearExpiredSchedule(event, context):
-    """Endpoint to delete calendar events with an event_id.
-
-    Args:
-        event.body.site (str):
-            sitecode for the site we are dealing with
-        event.body.time (str): 
-            UTC datestring (eg. '2022-05-14T17:30:00Z'). All events that start after this will be removed.
-
-    Returns:
-        200 status code, with list of projects that were associated with the deleted events
-    """
-    event_body = json.loads(event.get("body", ""))
-    associated_projects = remove_expired_scheduler_events(event_body["cutoff_time"], event_body["site"])
-    return create_response(200, json.dumps(associated_projects))
 
 
 def getSiteEventsInDateRange(event, context):
@@ -497,7 +278,6 @@ def getSiteEventsInDateRange(event, context):
 
     request_body = json.loads(event.get("body", ""))
     print(request_body)
-    table = dynamodb.Table(calendar_table_name)
 
     # Check that all required keys are present.
     required_keys = ['site', 'start', 'end']
@@ -512,7 +292,7 @@ def getSiteEventsInDateRange(event, context):
     end_date = request_body['end']
     site = request_body['site']
 
-    table_response = table.query(
+    table_response = calendar_table.query(
         IndexName="site-end-index",
         KeyConditionExpression=Key('site').eq(site) & Key('end').between(start_date, end_date)
     )
@@ -526,7 +306,7 @@ def getSiteEventsInDateRange(event, context):
             if project_id != "none":
                 project_name = project_id.split('#')[-2]
                 created_at = project_id.split('#')[-1]
-                e['project'] = getProject(project_name, created_at)
+                e['project'] = get_project(project_name, created_at)
 
     return create_response(200, json.dumps(events, cls=DecimalEncoder))
 
@@ -545,7 +325,6 @@ def getUserEventsEndingAfterTime(event, context):
     """
 
     event_body = json.loads(event.get("body", ""))
-    table = dynamodb.Table(calendar_table_name)
 
     print("event body:")
     print(event_body)
@@ -553,7 +332,7 @@ def getUserEventsEndingAfterTime(event, context):
     user_id = event_body["user_id"]
     time = event_body["time"]
 
-    response = table.query(
+    response = calendar_table.query(
         IndexName="creatorid-end-index",
         KeyConditionExpression=
                 Key('creator_id').eq(user_id)
@@ -579,7 +358,7 @@ def getEventAtTime(event, context):
 
     time = event_body["time"]
     site = event_body["site"]
-    events = getEventsDuringTime(time, site)
+    events = get_events_during_time(time, site)
     return create_response(200, json.dumps(events))
       
 
@@ -606,7 +385,7 @@ def isUserScheduled(event, context):
     site = event_body["site"]
     time = event_body["time"]
 
-    events = getEventsDuringTime(time, site)
+    events = get_events_during_time(time, site)
     allowed_users = [event["creator_id"] for event in events]
     print(f"Allowed users: {allowed_users}")
     return create_response(200, user in allowed_users)
@@ -640,7 +419,7 @@ def doesConflictingEventExist(event, context):
     site = event_body["site"]
     time = event_body["time"]
 
-    events = getEventsDuringTime(time, site)
+    events = get_events_during_time(time, site)
 
     # If any events belong to a different user, return True (indicating conflict)
     for event in events:
@@ -649,5 +428,4 @@ def doesConflictingEventExist(event, context):
 
     # Otherwise, report no conflicts (return False)
     return create_response(200, False)
- 
  
