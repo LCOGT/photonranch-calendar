@@ -238,7 +238,7 @@ def clear_old_schedule(site, cutoff_time=None):
     query = calendar_table.query(
         IndexName=index_name,
         KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
-        FilterExpression=Attr('origin').eq('lco') & Attr('start').gt(cutoff_time)
+        FilterExpression=Attr('origin').eq('LCO') & Attr('start').gt(cutoff_time)
     )
     items = query.get('Items', [])
     print(f"Removing expired scheduled events: {items}")
