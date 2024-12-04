@@ -130,7 +130,6 @@ def get_project(project_name, created_at):
 
 def delete_calendar_event(event_id, start_time, user_making_request=None, requester_is_admin=True):
     """Deletes an event from the DynamoDB table with optional authorization check."""
-    
     try:
         # Perform the delete operation
         response = calendar_table.delete_item(
@@ -142,7 +141,7 @@ def delete_calendar_event(event_id, start_time, user_making_request=None, reques
             ExpressionAttributeValues = {
                 ":requester_id": user_making_request, 
                 ":requesterIsAdmin": requester_is_admin,
-                ":true": "true"
+                ":true": True
             }
         )
         return response  # Return the raw response data (typically including `Item` if success)
