@@ -7,10 +7,39 @@ on:
       - 'README.md'
       
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE
+    - name: Check out repository
+      uses: actions/checkout@v3
 
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1-node16
+      with:
+        aws-access-key-id: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
+    # Install Python dependencies
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # Run tests
+    - name: Run tests
+      run: python -m pytest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
     - uses: actions/checkout@v1
         
     - name: Set up Node
