@@ -1,6 +1,6 @@
 # Photon Ranch Calendar
 
-This repository manages the backend service for the calendar at www.photonranch.org. Communication between the web interface and calendar database operations at AWS occur here.
+This repository manages the backend service for the calendar at [www.photonranch.org](https://photonranch.org). Communication between the web interface and calendar database operations at AWS occur here.
 
 This is a Serverless API deployed by the Serverless Framework, which creates and runs the Python functions in `handler.py` in AWS Lambda.
 
@@ -68,7 +68,8 @@ settings for Github Actions to continue deploying. You must be a repository coll
 
 ### Testing
 
-Instructions to manually run tests will be detailed here.
+Ensure the python requirements are installed by running `pip install -r requirements.txt`, ideally in a virtual environemnt.
+Then run tests with `python -m pytest`.
 
 ## Calendar Event Syntax
 
@@ -127,17 +128,6 @@ All datetimes should be formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
   - Authorization required: No.
   - Request body:
     - `events` (array): dictionaries for each calendar event to update.
-  - Responses:
-    - 200: success.
-
-- POST `/remove-expired-lco-schedule`
-  - Description: Removes all events at a given site under the following conditions:
-    - the event `origin` == "lco"
-    - the event `start` is after (greater than) the specified cutoff_time
-  - Authorization required: No.
-  - Request body:
-    - `site` (string): dictionaries for each calendar event to update
-    - `cutoff_time` (string): UTC datestring, which is compared against the `start` attribute
   - Responses:
     - 200: success.
 
@@ -201,3 +191,14 @@ All datetimes should be formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
   - Responses:
     - 200: true if conflicting events from a different user exist at the same time.
     - 200: false if no conflicting events exist.
+
+## Integration with LCO Observations
+
+This repository also includes a script that runs on a 5 minute interval that imports observations scheduled by
+LCO at Photon Ranch observatories and translates them into a Photon Ranch project and calendar event so that
+they can be easily run at Photon Ranch observatories.
+
+The routine can also be invoked manually with a GET request to the `/import-schedules` endpoint.
+
+The rate at which the script is automatically run can be adjusted in `serverless.yml` under
+`functions.importSchedulesFromLCO`.
