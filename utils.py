@@ -8,7 +8,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 dynamodb = boto3.resource('dynamodb')
-calendar_table_name = os.environ['DYNAMODB_CALENDAR']
+calendar_table_name = os.environ.get('DYNAMODB_CALENDAR', 'dummy-name-for-testing')
 calendar_table = dynamodb.Table(calendar_table_name)
 
 
@@ -43,7 +43,7 @@ class DecimalEncoder(json.JSONEncoder):
 
 def get_utc_iso_time():
     """Returns formatted UTC datetime string of current time."""
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def create_calendar_event(event):

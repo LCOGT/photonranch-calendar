@@ -14,13 +14,85 @@ ssm = boto3.client('ssm')
 
 
 class Observation:
-    def __init__(self, site, observation):
-        self.site = site
+    def __init__(self, observation):
         self.observation = observation
+        print("Validation of observation results: ", self.validate_observation_format(observation))
 
     def create_ptr_resources(self):
         self.create_calendar()
         self.create_project()
+
+    @staticmethod
+    def validate_observation_format(observation):
+        required_keys = {
+            "site": str,
+            "start": str,
+            "end": str,
+            "submitter": str,
+            "modified": str,
+            "created": str,
+            "name": str,
+            "observation_type": str,
+            "request": dict,
+        }
+
+        def validate_configuration(config):
+            required_configuration_keys = {
+                "constraints": dict,
+                "instrument_configs": list,
+                "target": dict,
+                "type": str
+            }
+            config_keys_present = all(key in config and isinstance(config[key], types)
+                    for key, types in required_configuration_keys.items())
+            targets_ok = validate_target(config.get("target", {}))
+            constraints_ok = all(key in config.get("constraints", {}) for key in ["max_airmass", "max_lunar_phase", "min_lunar_distance"])
+            instrument_configs_ok = all(validate_inst_config(inst_config) for inst_config in config.get("instrument_configs", [{}]))
+            if not config_keys_present:
+                return False, "Missing required keys in configuration"
+            if not targets_ok:
+                return False, "Targets failed validation"
+            if not constraints_ok:
+                return False, "Constraints failed validation"
+            if not instrument_configs_ok:
+                return False, "Instrument configs failed validation"
+            return True, "Validation successful"
+
+        def validate_target(target):
+            required_target_keys = {
+                "ra": (int, float),
+                "dec": (int, float)
+            }
+            return all(key in target and isinstance(target[key], types)
+                    for key, types in required_target_keys.items())
+
+        def validate_inst_config(instrument_config):
+            required_keys = {
+                "exposure_count": int,
+                "exposure_time": (int, float),
+                "mode": str,
+                "extra_params": dict,
+                "optical_elements": dict
+            }
+            keys_are_present = all(key in instrument_config and isinstance(instrument_config[key], types)
+                    for key, types in required_keys.items())
+            filter_present = "filter" in instrument_config["optical_elements"] and isinstance(instrument_config["optical_elements"]["filter"], str)
+            offsets_present = all(key in instrument_config["extra_params"] for key in ["offset_dec", "offset_ra", "rotator_angle"])
+            return keys_are_present and filter_present and offsets_present
+
+        # Validate top-level keys
+        missing_keys = [key for key in required_keys if key not in observation]
+        if missing_keys:
+            return False, f"Missing keys: {missing_keys}"
+
+        # Validate configurations
+        configurations = observation["request"].get("configurations", [])
+        for index, conf in enumerate(configurations):
+            config_passed, message = validate_configuration(conf)
+            if not isinstance(conf, dict) or not config_passed:
+                return False, f"Configuration number {index} failed validation: {message}"
+
+        return True, "Validation successful"
 
     def _translate_to_calendar(self):
         # we need the project_id, so do the project translation if it doesn't exist
@@ -272,7 +344,7 @@ def create_latest_schedule(site):
     sched = get_schedule(site)
     print(f"Number of observations to schedule: {len(sched)}")
     for obs in sched:
-        observation = Observation(site, obs) 
+        observation = Observation(obs)
         observation.create_ptr_resources()
     
 
@@ -282,5 +354,6 @@ def import_all_schedules(event={}, context={}):
     for site in sites:
         clear_old_schedule(site)
         create_latest_schedule(site)
+    # When invoked using the http endpoint, provide a valid http response
     if "httpMethod" in event:
         return create_response(200, "Import schedules routine finished")
