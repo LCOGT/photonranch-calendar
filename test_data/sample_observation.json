@@ -1,7 +1,7 @@
 {
   "site": "mrc",
   "enclosure": "enc1",
-  "telescope": "0m35",
+  "telescope": "0m31",
   "observation_type": "NORMAL",
   "state": "PENDING",
   "id": 583116837,
@@ -30,7 +30,7 @@
         "id": 10840779,
         "configuration_status": 750648588,
         "instrument_name": "q461",
-        "instrument_type": "0M35-QHY461",
+        "instrument_type": "0M31-QHY461",
         "priority": 1,
         "repeat_duration": null,
         "state": "PENDING",
@@ -144,7 +144,7 @@
           }
         ],
         "instrument_name": "q461",
-        "instrument_type": "0M35-QHY461",
+        "instrument_type": "0M31-QHY461",
         "priority": 2,
         "repeat_duration": null,
         "state": "PENDING",
@@ -220,7 +220,7 @@
           }
         ],
         "instrument_name": "q461",
-        "instrument_type": "0M35-QHY461",
+        "instrument_type": "0M31-QHY461",
         "priority": 3,
         "repeat_duration": null,
         "state": "PENDING",
@@ -281,7 +281,7 @@
           }
         ],
         "instrument_name": "q461",
-        "instrument_type": "0M35-QHY461",
+        "instrument_type": "0M31-QHY461",
         "priority": 4,
         "repeat_duration": null,
         "state": "PENDING",

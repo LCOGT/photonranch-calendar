@@ -12,11 +12,36 @@ from utils import create_response
 
 ssm = boto3.client('ssm')
 
+# This allows us to identify a site using configdb telescope ids
+SITE_FROM_WEMA_AND_TELESCOPE_ID = {
+    "mrc": {
+        "0m31": "mrc1",
+        "0m61": "mrc2"
+    },
+    "aro": {
+        "0m3": "aro1"
+    },
+    "eco": {
+        "0m43": "eco1",
+        "0m28": "eco2"
+    }
+}
+
+SITES_TO_USE_WITH_SCHEDULER = [
+    "mrc"
+]
+
 
 class Observation:
     def __init__(self, observation):
         self.observation = observation
         print("Validation of observation results: ", self.validate_observation_format(observation))
+        self.wema = observation["site"]
+        self.ptr_site = SITE_FROM_WEMA_AND_TELESCOPE_ID[self.wema][observation["telescope"]]
+
+        # Create this here so it can be used in the project as well.
+        # There should be just one calendar event and one project per observation (for now)
+        self.calendar_event_id = str(uuid.uuid4())
 
     def create_ptr_resources(self):
         self.create_calendar()
@@ -32,6 +57,7 @@ class Observation:
             "modified": str,
             "created": str,
             "name": str,
+            "telescope": str,
             "observation_type": str,
             "request": dict,
         }
@@ -101,7 +127,7 @@ class Observation:
 
         observation = self.observation # just for readability
         event = {
-            "event_id": str(uuid.uuid4()),
+            "event_id": self.calendar_event_id,
             "start": observation["start"],
             "end": observation["end"],
             "creator": observation["submitter"],
@@ -112,8 +138,8 @@ class Observation:
             "reservation_note": "This event was created and scheduled by the LCO Scheduler",
             "reservation_type": "project",
             "origin": "LCO",
-            "resourceId": observation["site"],
-            "site": observation["site"],
+            "resourceId": self.ptr_site,
+            "site": self.ptr_site,
             "title": f"{observation['name']} (via LCO)"
         }
         if observation["observation_type"] in ["RAPID_RESPONSE", "TIME_CRITICAL"]:
@@ -149,7 +175,7 @@ class Observation:
             "project_id": f"{project_name}#{created_at}",
 
             # with PTR these are usually used for scheduling, but from the observation they specify
-            # the start and end times for the already-created schedule. 
+            # the start and end times for the already-created schedule.
             # Including them here doesn't hurt and doesn't deviate from their meaning
             "start_date": start_date,
             "expiry_date": expiry_date,
@@ -181,11 +207,11 @@ class Observation:
             "user_id": user_id
             },
             "project_priority": "standard",
-            "project_sites": [ observation["site"] ],
+            "project_sites": [ self.ptr_site ],
             "project_note": "Created automatically with the LCO scheduler",
 
             # not sure if we should use this
-            "scheduled_with_events": [],
+            "scheduled_with_events": [ self.calendar_event_id ],
         }
 
         project["project_targets"] = [ configuration["target"] ]
@@ -212,11 +238,11 @@ class Observation:
             "defocus": inst_config["extra_params"].get("defocus", 0),
 
             # "repeat": 0,
-            # "bin": 
+            # "bin":
             }
             exposure_set
             project["exposures"].append(exposure_set)
-            # The following deep track of completed and remaining exposures. 
+            # The following deep track of completed and remaining exposures.
             # They have not been implemented/used by the tcs but we'll initialize them here anyways
             project["project_data"].append([])
             project["remaining"].append(exposure_set["count"])
@@ -251,7 +277,7 @@ def get_site_proxy_header(site):
 
 
 def get_schedule(site, start=None, end=None, limit=1000):
-    
+
     # By default, initialize the range to start now and end in 3 weeks.
     now = datetime.now(timezone.utc)
     if start == None:
@@ -281,29 +307,29 @@ def remove_projects(project_ids: list):
 
 def clear_old_schedule(site, cutoff_time=None):
     """ Method for deleting calendar events created in response to the LCO scheduler.
-    
+
     This method takes a site and a cutoff time, and deletes all events that satisfy the following conditions:
         - the event belongs to the given site
         - the event ends after the cutoff_time (specifically, the event end is greater than the cutoff_time)
         - the event origin is 'LCO'
-    Then it gathers a list of project IDs that were associated with the deleted events, and delete them too. 
+    Then it gathers a list of project IDs that were associated with the deleted events, and delete them too.
 
     Args:
-        cutoff_time (str): 
+        cutoff_time (str):
             Formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
             Any events that end before this time are not deleted.
-        site (str): 
+        site (str):
             Only delete events from the given site (e.g. 'mrc')
 
     Returns:
-        (array of str) project IDs for any projects that were connected to deleted events. 
+        (array of str) project IDs for any projects that were connected to deleted events.
     """
     index_name = "site-end-index"
 
     if cutoff_time is None:
         cutoff_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        
-    
+
+
     # Query items from the secondary index with 'site' as the partition key and 'end' greater than the specified end_date
     query = calendar_table.query(
         IndexName=index_name,
@@ -312,14 +338,14 @@ def clear_old_schedule(site, cutoff_time=None):
     )
     items = query.get('Items', [])
     print(f"Removing expired scheduled events: {items}")
-    
+
     # Extract key attributes for deletion (use the primary key attributes, not the index keys)
     key_names = [k['AttributeName'] for k in calendar_table.key_schema]
-    
+
     with calendar_table.batch_writer() as batch:
         for item in items:
             batch.delete_item(Key={k: item[k] for k in key_names if k in item})
-    
+
     # Handle pagination if results exceed 1MB
     while 'LastEvaluatedKey' in query:
         query = calendar_table.query(
@@ -329,7 +355,7 @@ def clear_old_schedule(site, cutoff_time=None):
             ExclusiveStartKey=query['LastEvaluatedKey']
         )
         items = query.get('Items', [])
-        
+
         with calendar_table.batch_writer() as batch:
             for item in items:
                 batch.delete_item(Key={k: item[k] for k in key_names if k in item})
@@ -338,7 +364,7 @@ def clear_old_schedule(site, cutoff_time=None):
     associated_projects = [x["project_id"] for x in items]
     print(f"{len(associated_projects)} projects slated for removal: ", associated_projects)
     remove_projects(associated_projects) # delete projects
-    
+
 
 def create_latest_schedule(site):
     sched = get_schedule(site)
@@ -346,12 +372,11 @@ def create_latest_schedule(site):
     for obs in sched:
         observation = Observation(obs)
         observation.create_ptr_resources()
-    
+
 
 # This is the function that is run on a cron timer
 def import_all_schedules(event={}, context={}):
-    sites = ['mrc']
-    for site in sites:
+    for site in SITES_TO_USE_WITH_SCHEDULER:
         clear_old_schedule(site)
         create_latest_schedule(site)
     # When invoked using the http endpoint, provide a valid http response
