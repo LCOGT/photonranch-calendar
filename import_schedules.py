@@ -1,3 +1,13 @@
+# Note: there is a collision between the LCO definition of a site and the PTR
+# definition of a site. An LCO "site" is the same as a PTR WEMA.
+# For example, LCO calls "MRC" a site, while PTR uses "site" to refer to MRC1 and MRC2.
+
+# This is a little confusing, so we refer to the PTR version of a site as a "PTR site".
+
+# The site-proxy that is used to fetch observation schedules has an instance per
+# WEMA. E.g. there is one site-proxy running for "MRC", which contains observations
+# scheduled at MRC1 and MRC2.
+
 import requests
 import json
 from datetime import datetime, timezone, timedelta
@@ -27,9 +37,19 @@ SITE_FROM_WEMA_AND_TELESCOPE_ID = {
     }
 }
 
+# Only query scheduler for observations at these sites
 SITES_TO_USE_WITH_SCHEDULER = [
     "mrc"
 ]
+
+# This lists the ptr sites running at each wema.
+# When clearing old schedules, we iterate through wemas but need to clear for
+# each individual site.
+PTR_SITES_PER_WEMA = {
+    "mrc": ["mrc1", "mrc2"],
+    "aro": ["aro1"],
+    "eco": ["eco1", "eco2"]
+}
 
 
 class Observation:
@@ -377,7 +397,8 @@ def create_latest_schedule(site):
 # This is the function that is run on a cron timer
 def import_all_schedules(event={}, context={}):
     for site in SITES_TO_USE_WITH_SCHEDULER:
-        clear_old_schedule(site)
+        for ptr_site in PTR_SITES_PER_WEMA[site]:
+            clear_old_schedule(ptr_site)
         create_latest_schedule(site)
     # When invoked using the http endpoint, provide a valid http response
     if "httpMethod" in event:
