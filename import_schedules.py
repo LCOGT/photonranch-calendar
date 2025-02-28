@@ -39,7 +39,9 @@ SITE_FROM_WEMA_AND_TELESCOPE_ID = {
 
 # Only query scheduler for observations at these sites
 SITES_TO_USE_WITH_SCHEDULER = [
-    "mrc"
+    "mrc",
+    "aro",
+    "eco"
 ]
 
 # This lists the ptr sites running at each wema.
