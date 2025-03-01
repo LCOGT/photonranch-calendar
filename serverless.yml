@@ -59,7 +59,7 @@ provider:
     role:
       statements:
         - Effect: Allow
-        Action:
+          Action:
             - "dynamodb:PutItem"
             - "dynamodb:GetItem"
             - "dynamodb:UpdateItem"
