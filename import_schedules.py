@@ -23,6 +23,13 @@ from utils import create_response
 
 ssm = boto3.client('ssm')
 
+# Only query scheduler for observations at these sites
+SITES_TO_USE_WITH_SCHEDULER = [
+    "mrc",
+    "aro",
+    "eco"
+]
+
 # This allows us to identify a site using configdb telescope ids
 # WEMA → telescope ID → PTR site
 SITE_FROM_WEMA_AND_TELESCOPE_ID = {
@@ -45,11 +52,6 @@ PTR_SITE_TO_WEMA_TELESCOPE = {}
 for wema, telescopes in SITE_FROM_WEMA_AND_TELESCOPE_ID.items():
     for tel_id, ptr_site in telescopes.items():
         PTR_SITE_TO_WEMA_TELESCOPE[ptr_site] = (wema, tel_id)
-
-# Only query scheduler for observations at these sites
-SITES_TO_USE_WITH_SCHEDULER = [
-    "mrc"
-]
 
 # This lists the ptr sites running at each wema.
 # When clearing old schedules, we iterate through wemas but need to clear for
