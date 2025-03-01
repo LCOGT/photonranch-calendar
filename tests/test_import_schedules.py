@@ -43,77 +43,6 @@ MOCK_LAST_SCHEDULED = {
     "last_schedule_time": "2025-02-21T16:36:44.534003Z"
 }
 
-@pytest.fixture
-def mock_tables():
-    """Setup mock DynamoDB tables for testing"""
-    with mock_dynamodb():
-        # Create the tracking table
-        dynamodb = boto3.resource('dynamodb')
-        tracking_table = dynamodb.create_table(
-            TableName='dev-schedule-tracking',
-            KeySchema=[
-                {'AttributeName': 'ptr_site', 'KeyType': 'HASH'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'ptr_site', 'AttributeType': 'S'}
-            ],
-            ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
-        )
-
-        # Create the calendar table with required indexes
-        calendar_table = dynamodb.create_table(
-            TableName='calendar-dev',
-            KeySchema=[
-                {'AttributeName': 'event_id', 'KeyType': 'HASH'},
-                {'AttributeName': 'start', 'KeyType': 'RANGE'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'event_id', 'AttributeType': 'S'},
-                {'AttributeName': 'start', 'AttributeType': 'S'},
-                {'AttributeName': 'end', 'AttributeType': 'S'},
-                {'AttributeName': 'site', 'AttributeType': 'S'},
-                {'AttributeName': 'creator_id', 'AttributeType': 'S'}
-            ],
-            GlobalSecondaryIndexes=[
-                {
-                    'IndexName': 'creatorid-end-index',
-                    'KeySchema': [
-                        {'AttributeName': 'creator_id', 'KeyType': 'HASH'},
-                        {'AttributeName': 'end', 'KeyType': 'RANGE'}
-                    ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'ProvisionedThroughput': {'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
-                },
-                {
-                    'IndexName': 'site-end-index',
-                    'KeySchema': [
-                        {'AttributeName': 'site', 'KeyType': 'HASH'},
-                        {'AttributeName': 'end', 'KeyType': 'RANGE'}
-                    ],
-                    'Projection': {'ProjectionType': 'ALL'},
-                    'ProvisionedThroughput': {'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
-                }
-            ],
-            ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
-        )
-
-        # Add some sample calendar events
-        calendar_table.put_item(Item={
-            'event_id': 'test-event-1',
-            'start': '2025-02-15T10:00:00Z',
-            'end': '2025-02-15T11:00:00Z',
-            'site': 'mrc1',
-            'creator_id': 'testuser#LCO',
-            'origin': 'LCO',
-            'project_id': 'test-project-1'
-        })
-
-        # Set environment variables
-        with patch.dict('os.environ', {
-            'DYNAMODB_CALENDAR': 'calendar-dev',
-            'STAGE': 'dev'
-        }):
-            yield
 
 # Unit Tests
 
@@ -196,12 +125,12 @@ def test_update_and_get_tracking_time(mock_tables):
 
 def test_clear_old_schedule(mock_tables):
     """Test clearing old schedules for a specific site"""
-    # Set up some sample data
+    # Get references to the mock tables
     dynamodb = boto3.resource('dynamodb')
-    calendar_table = dynamodb.Table('calendar-dev')
+    mock_calendar_table = dynamodb.Table('calendar-dev')
 
-    # Add another test event
-    calendar_table.put_item(Item={
+    # Add test events to the mock table
+    mock_calendar_table.put_item(Item={
         'event_id': 'test-event-2',
         'start': '2025-02-16T10:00:00Z',
         'end': '2025-02-16T11:00:00Z',
@@ -211,25 +140,27 @@ def test_clear_old_schedule(mock_tables):
         'project_id': 'test-project-2'
     })
 
-    # Mock remove_projects
-    with patch('import_schedules.remove_projects') as mock_remove:
-        mock_remove.return_value = MagicMock()
+    # IMPORTANT: Patch the imported calendar_table to use our mock
+    with patch('import_schedules.calendar_table', mock_calendar_table):
+        # Also mock remove_projects
+        with patch('import_schedules.remove_projects') as mock_remove:
+            mock_remove.return_value = MagicMock()
 
-        # Clear schedules with cutoff time that should remove only the second event
-        cutoff_time = '2025-02-15T23:00:00Z'
-        removed_projects = clear_old_schedule('mrc1', cutoff_time)
+            # Clear schedules with cutoff time that should remove only the second event
+            cutoff_time = '2025-02-15T23:00:00Z'
+            removed_projects = clear_old_schedule('mrc1', cutoff_time)
 
-        # Verify only one project was removed
-        assert len(removed_projects) == 1
-        assert removed_projects[0] == 'test-project-2'
+            # Verify only one project was removed
+            assert len(removed_projects) == 1
+            assert removed_projects[0] == 'test-project-2'
 
-        # Verify remove_projects was called with correct arguments
-        mock_remove.assert_called_once_with(['test-project-2'])
+            # Verify remove_projects was called with correct arguments
+            mock_remove.assert_called_once_with(['test-project-2'])
 
-        # Check that only one event remains in the table
-        response = calendar_table.scan()
-        assert len(response['Items']) == 1
-        assert response['Items'][0]['event_id'] == 'test-event-1'
+            # Check that only one event remains in the table
+            response = mock_calendar_table.scan()
+            assert len(response['Items']) == 1
+            assert response['Items'][0]['event_id'] == 'test-event-1'
 
 # Integration Tests
 
