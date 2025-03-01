@@ -14,9 +14,11 @@ plugins:
   - serverless-domain-manager
 
 custom:
-
   # Define the name for the calendar dynamodb table
   calendarTableName: calendar-${self:provider.stage}
+  # Fixed: Define stage first so it can be used in scheduleTrackingTableName
+  stage: ${opt:stage, "test"}
+  # Fixed: Use direct reference to stage instead of object lookup
   scheduleTrackingTableName: ${self:custom.stage}-schedule-tracking
 
   # Enable point-in-time-recovery for dynamodb
@@ -26,7 +28,7 @@ custom:
 
   # This is the 'variable' for the customDomain.basePath value, based on the stage.
   # Run as `sls deploy --stage <stage_name>`
-  stage:
+  stageMap:
     prod: calendar
     dev: dev
     test: test
@@ -39,10 +41,9 @@ custom:
 
   customDomain:
     domainName: 'calendar.photonranch.org'
-    basePath: ${self:custom.stage.${self:provider.stage}}
+    basePath: ${self:custom.stageMap.${self:provider.stage}, self:custom.stageMap.test}
     stage: ${self:provider.stage}
     createRoute53Record: true
-
 
 provider:
   name: aws
@@ -70,7 +71,7 @@ provider:
             - "dynamodb:BatchWriteItem"
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
-            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.stage}-schedule-tracking"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.scheduleTrackingTableName}"
 
         - Effect: Allow
           Action:
@@ -80,7 +81,6 @@ provider:
 
 resources: # CloudFormation template syntax from here on.
   Resources:
-
     # Configure API gateway "Gateway Responses" to work with CORS restrictions
     GatewayResponseDefault4XX:
       Type: 'AWS::ApiGateway::GatewayResponse'
@@ -170,20 +170,20 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        scheduleTrackingTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: ${self:custom.scheduleTrackingTableName}
-      AttributeDefinitions:
-        - AttributeName: ptr_site
-          AttributeType: S
-      KeySchema:
-        - AttributeName: ptr_site
-          KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
 
+    scheduleTrackingTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.scheduleTrackingTableName}
+        AttributeDefinitions:
+          - AttributeName: ptr_site
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ptr_site
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
 
 functions:
   authorizerFunc:
@@ -373,7 +373,6 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-
   importSchedulesFromLCO:
       handler: import_schedules.import_all_schedules
       events:
