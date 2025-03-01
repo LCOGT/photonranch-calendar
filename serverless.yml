@@ -17,6 +17,7 @@ custom:
 
   # Define the name for the calendar dynamodb table
   calendarTableName: calendar-${self:provider.stage}
+  scheduleTrackingTableName: ${self:custom.stage}-schedule-tracking
 
   # Enable point-in-time-recovery for dynamodb
   pitr:
@@ -48,16 +49,17 @@ provider:
   stage: ${opt:stage, "test"}
   runtime: python3.9
   region: us-east-1
-  environment: 
+  environment:
     DYNAMODB_CALENDAR: ${self:custom.calendarTableName}
+    SCHEDULE_TRACKING_TABLE: ${self:custom.scheduleTrackingTableName}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
     STAGE: ${self:provider.stage}
   iam:
     role:
       statements:
-        - Effect: Allow 
-          Action: 
+        - Effect: Allow
+        Action:
             - "dynamodb:PutItem"
             - "dynamodb:GetItem"
             - "dynamodb:UpdateItem"
@@ -68,6 +70,7 @@ provider:
             - "dynamodb:BatchWriteItem"
           Resource:
             - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.calendarTableName}*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.stage}-schedule-tracking"
 
         - Effect: Allow
           Action:
@@ -121,7 +124,7 @@ resources: # CloudFormation template syntax from here on.
         StatusCode: '401'
 
     # Define the dynamodb table we use to store calendar events
-    calendarTable: 
+    calendarTable:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:custom.calendarTableName}
@@ -167,16 +170,29 @@ resources: # CloudFormation template syntax from here on.
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+        scheduleTrackingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.scheduleTrackingTableName}
+      AttributeDefinitions:
+        - AttributeName: ptr_site
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ptr_site
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
 
 
 functions:
-  authorizerFunc: 
+  authorizerFunc:
     handler: authorizer.auth
   addNewEvent:
     handler: handler.addNewEvent
     events:
       - http:
-          path: newevent 
+          path: newevent
           method: post
           authorizer:
             name: authorizerFunc
@@ -216,8 +232,8 @@ functions:
     handler: handler.modifyEvent
     events:
       - http:
-          path: modifyevent 
-          method: post 
+          path: modifyevent
+          method: post
           authorizer:
             name: authorizerFunc
             resultTtlInSeconds: 0
@@ -237,7 +253,7 @@ functions:
     events:
       - http:
           path: add-projects-to-events
-          method: post 
+          method: post
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0
@@ -257,7 +273,7 @@ functions:
     events:
       - http:
           path: remove-project-from-events
-          method: post 
+          method: post
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0
@@ -276,7 +292,7 @@ functions:
     handler: handler.getSiteEventsInDateRange
     events:
       - http:
-          path: siteevents 
+          path: siteevents
           method: post
           cors:
             origin: '*'
@@ -359,11 +375,18 @@ functions:
               - Access-Control-Allow-Credentials
 
   importSchedulesFromLCO:
-    handler: import_schedules.import_all_schedules
-    events:
-      - schedule:
-          rate: rate(5 minutes)
-          enabled: true
-      - http:
-          path: import-schedules
-          method: get
+      handler: import_schedules.import_all_schedules
+      events:
+        - schedule:
+            rate: rate(5 minutes)
+            enabled: true
+        - http:
+            path: import-schedules
+            method: get
+        - http:
+            path: import-schedules/{subsite}
+            method: get
+            request:
+              parameters:
+                paths:
+                  subsite: true

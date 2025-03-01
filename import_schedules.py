@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import uuid
 import boto3
+import os
 from boto3.dynamodb.conditions import Key, Attr
 
 from utils import calendar_table
@@ -23,6 +24,7 @@ from utils import create_response
 ssm = boto3.client('ssm')
 
 # This allows us to identify a site using configdb telescope ids
+# WEMA → telescope ID → PTR site
 SITE_FROM_WEMA_AND_TELESCOPE_ID = {
     "mrc": {
         "0m31": "mrc1",
@@ -37,11 +39,16 @@ SITE_FROM_WEMA_AND_TELESCOPE_ID = {
     }
 }
 
+# Mapping from PTR site to WEMA and telescope ID
+# This is the reverse of the above mapping for easier lookup
+PTR_SITE_TO_WEMA_TELESCOPE = {}
+for wema, telescopes in SITE_FROM_WEMA_AND_TELESCOPE_ID.items():
+    for tel_id, ptr_site in telescopes.items():
+        PTR_SITE_TO_WEMA_TELESCOPE[ptr_site] = (wema, tel_id)
+
 # Only query scheduler for observations at these sites
 SITES_TO_USE_WITH_SCHEDULER = [
-    "mrc",
-    "aro",
-    "eco"
+    "mrc"
 ]
 
 # This lists the ptr sites running at each wema.
@@ -53,6 +60,29 @@ PTR_SITES_PER_WEMA = {
     "eco": ["eco1", "eco2"]
 }
 
+# DynamoDB table for tracking last schedule update times
+def get_schedule_tracking_table():
+    """Get the DynamoDB table for tracking schedule updates"""
+    dynamodb = boto3.resource('dynamodb')
+    # Use the same naming convention and environment variable approach
+    # as your other tables
+    stage = os.environ.get('STAGE', 'dev')
+    table_name = f"{stage}-schedule-tracking"
+
+    return dynamodb.Table(table_name)
+
+# Then you would modify any use of this table to handle the case where
+# the table doesn't exist yet (first deployment scenario)
+def get_last_tracked_schedule_time(ptr_site):
+    """Get the last tracked schedule time for a subsite"""
+    try:
+        tracking_table = get_schedule_tracking_table()
+        response = tracking_table.get_item(Key={'ptr_site': ptr_site})
+        if 'Item' in response:
+            return response['Item'].get('last_schedule_time')
+    except Exception as e:
+        print(f"Error retrieving last tracked schedule time: {e}")
+    return None
 
 class Observation:
     def __init__(self, observation):
@@ -285,10 +315,8 @@ class Observation:
         print("Created new project")
         return response.json()
 
-
 def get_site_proxy_url(site, path):
     return f"https://{site}-proxy.lco.global/{path}"
-
 
 def get_site_proxy_header(site):
     response = ssm.get_parameter(
@@ -297,9 +325,20 @@ def get_site_proxy_header(site):
     )
     return { "Authorization": response['Parameter']['Value'] }
 
+def get_last_schedule_time(wema):
+    """Get the timestamp of when the schedule was last created at the site proxy"""
+    url_path = "observation-portal/api/last_scheduled"
+    url = get_site_proxy_url(wema, url_path)
+    header = get_site_proxy_header(wema)
+    response = requests.get(url, headers=header)
 
-def get_schedule(site, start=None, end=None, limit=1000):
+    if response.status_code == 200:
+        data = response.json()
+        return data.get('last_schedule_time', None)
+    return None
 
+def get_schedule(wema, telescope_id=None, start=None, end=None, limit=1000):
+    """Get the schedule from the site proxy with optional telescope filter"""
     # By default, initialize the range to start now and end in 3 weeks.
     now = datetime.now(timezone.utc)
     if start == None:
@@ -307,17 +346,23 @@ def get_schedule(site, start=None, end=None, limit=1000):
     if end == None:
         end = (now + timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Call the site proxy to get the latest schedule
+    # Build the URL path with query parameters
     url_path = f"observation-portal/api/schedule?start={start}&end={end}&limit={limit}"
-    url = get_site_proxy_url(site, url_path)
-    header = get_site_proxy_header(site)
+    if telescope_id:
+        url_path += f"&telescope={telescope_id}"
+
+    url = get_site_proxy_url(wema, url_path)
+    header = get_site_proxy_header(wema)
     response = requests.get(url, headers=header)
 
     # We're only interested in pending observations, ignore others
-    sched = [x for x in response.json().get("results") if x["state"] == "PENDING"]
-    print(f"getting schedule from {start} to {end}")
-    return sched
+    if response.status_code == 200:
+        sched = [x for x in response.json().get("results") if x["state"] == "PENDING"]
+        print(f"getting schedule from {start} to {end}")
+        return sched
 
+    print(f"Error fetching schedule: {response.status_code}")
+    return []
 
 def remove_projects(project_ids: list):
     url = get_projects_url('delete-scheduler-projects')
@@ -326,12 +371,11 @@ def remove_projects(project_ids: list):
     response = requests.post(url, request_body)
     return response
 
+def clear_old_schedule(ptr_site, cutoff_time=None):
+    """Method for deleting calendar events created in response to the LCO scheduler.
 
-def clear_old_schedule(site, cutoff_time=None):
-    """ Method for deleting calendar events created in response to the LCO scheduler.
-
-    This method takes a site and a cutoff time, and deletes all events that satisfy the following conditions:
-        - the event belongs to the given site
+    This method takes a ptr_site and a cutoff time, and deletes all events that satisfy the following conditions:
+        - the event belongs to the given ptr_site
         - the event ends after the cutoff_time (specifically, the event end is greater than the cutoff_time)
         - the event origin is 'LCO'
     Then it gathers a list of project IDs that were associated with the deleted events, and delete them too.
@@ -340,8 +384,8 @@ def clear_old_schedule(site, cutoff_time=None):
         cutoff_time (str):
             Formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
             Any events that end before this time are not deleted.
-        site (str):
-            Only delete events from the given site (e.g. 'mrc')
+        ptr_site (str):
+            Only delete events from the given ptr_site (e.g. 'mrc1')
 
     Returns:
         (array of str) project IDs for any projects that were connected to deleted events.
@@ -351,15 +395,14 @@ def clear_old_schedule(site, cutoff_time=None):
     if cutoff_time is None:
         cutoff_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
-
     # Query items from the secondary index with 'site' as the partition key and 'end' greater than the specified end_date
     query = calendar_table.query(
         IndexName=index_name,
-        KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
+        KeyConditionExpression=Key('site').eq(ptr_site) & Key('end').gt(cutoff_time),
         FilterExpression=Attr('origin').eq('LCO')
     )
     items = query.get('Items', [])
-    print(f"Removing expired scheduled events: {items}")
+    print(f"Removing expired scheduled events for {ptr_site}: {items}")
 
     # Extract key attributes for deletion (use the primary key attributes, not the index keys)
     key_names = [k['AttributeName'] for k in calendar_table.key_schema]
@@ -372,7 +415,7 @@ def clear_old_schedule(site, cutoff_time=None):
     while 'LastEvaluatedKey' in query:
         query = calendar_table.query(
             IndexName=index_name,
-            KeyConditionExpression=Key('site').eq(site) & Key('end').gt(cutoff_time),
+            KeyConditionExpression=Key('site').eq(ptr_site) & Key('end').gt(cutoff_time),
             FilterExpression=Attr('origin').eq('LCO'),
             ExclusiveStartKey=query['LastEvaluatedKey']
         )
@@ -385,23 +428,89 @@ def clear_old_schedule(site, cutoff_time=None):
     # Delete any projects that were associated with the deleted calendar events
     associated_projects = [x["project_id"] for x in items]
     print(f"{len(associated_projects)} projects slated for removal: ", associated_projects)
-    remove_projects(associated_projects) # delete projects
+    if associated_projects:
+        remove_projects(associated_projects) # delete projects
 
+    return associated_projects
 
-def create_latest_schedule(site):
-    sched = get_schedule(site)
-    print(f"Number of observations to schedule: {len(sched)}")
+def update_last_schedule_time(ptr_site, schedule_time):
+    """Update the tracking table with the latest schedule time for a subsite"""
+    tracking_table = get_schedule_tracking_table()
+    tracking_table.put_item(
+        Item={
+            'ptr_site': ptr_site,
+            'last_schedule_time': schedule_time,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+    )
+
+def get_last_tracked_schedule_time(ptr_site):
+    """Get the last tracked schedule time for a subsite"""
+    tracking_table = get_schedule_tracking_table()
+    try:
+        response = tracking_table.get_item(Key={'ptr_site': ptr_site})
+        if 'Item' in response:
+            return response['Item'].get('last_schedule_time')
+    except Exception as e:
+        print(f"Error retrieving last tracked schedule time: {e}")
+    return None
+
+def create_latest_schedule_for_subsite(ptr_site):
+    """Create the latest schedule for a specific subsite"""
+    if ptr_site not in PTR_SITE_TO_WEMA_TELESCOPE:
+        return f"Unknown subsite: {ptr_site}"
+
+    wema, telescope_id = PTR_SITE_TO_WEMA_TELESCOPE[ptr_site]
+
+    # Check if we need to update by comparing last schedule times
+    last_proxy_schedule_time = get_last_schedule_time(wema)
+    last_tracked_schedule_time = get_last_tracked_schedule_time(ptr_site)
+
+    if last_tracked_schedule_time and last_proxy_schedule_time:
+        # Compare timestamps to see if we need to update
+        proxy_time = datetime.fromisoformat(last_proxy_schedule_time.replace('Z', '+00:00'))
+        tracked_time = datetime.fromisoformat(last_tracked_schedule_time.replace('Z', '+00:00'))
+
+        if proxy_time <= tracked_time:
+            print(f"Schedule for {ptr_site} is already up to date. Last schedule: {last_tracked_schedule_time}")
+            return f"Schedule for {ptr_site} is already up to date"
+
+    # Clear old schedule for this subsite
+    clear_old_schedule(ptr_site)
+
+    # Get and process the new schedule
+    sched = get_schedule(wema, telescope_id)
+    print(f"Number of observations to schedule for {ptr_site}: {len(sched)}")
+
     for obs in sched:
         observation = Observation(obs)
         observation.create_ptr_resources()
 
+    # Update the tracking table with the new schedule time
+    if last_proxy_schedule_time:
+        update_last_schedule_time(ptr_site, last_proxy_schedule_time)
+
+    return f"Updated schedule for {ptr_site} with {len(sched)} observations"
 
 # This is the function that is run on a cron timer
 def import_all_schedules(event={}, context={}):
-    for site in SITES_TO_USE_WITH_SCHEDULER:
-        for ptr_site in PTR_SITES_PER_WEMA[site]:
-            clear_old_schedule(ptr_site)
-        create_latest_schedule(site)
+    results = {}
+
+    # Check if we're handling a specific subsite
+    if "httpMethod" in event and "pathParameters" in event and event["pathParameters"]:
+        ptr_site = event["pathParameters"].get("subsite")
+        if ptr_site:
+            result = create_latest_schedule_for_subsite(ptr_site)
+            return create_response(200, result)
+
+    # Otherwise, update all subsites
+    for wema in SITES_TO_USE_WITH_SCHEDULER:
+        for ptr_site in PTR_SITES_PER_WEMA[wema]:
+            result = create_latest_schedule_for_subsite(ptr_site)
+            results[ptr_site] = result
+
     # When invoked using the http endpoint, provide a valid http response
     if "httpMethod" in event:
-        return create_response(200, "Import schedules routine finished")
+        return create_response(200, json.dumps(results))
+
+    return results

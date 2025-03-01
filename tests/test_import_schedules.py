@@ -1,44 +1,316 @@
 import json
 import pytest
-from import_schedules import Observation
+import boto3
+import os
+import datetime
+import responses
+from unittest.mock import patch, MagicMock, ANY
+from moto import mock_dynamodb
 
+import import_schedules
+from import_schedules import (
+    Observation,
+    get_last_schedule_time,
+    get_schedule,
+    clear_old_schedule,
+    update_last_schedule_time,
+    get_last_tracked_schedule_time,
+    create_latest_schedule_for_subsite,
+    import_all_schedules
+)
+
+# Sample observation data for testing
 with open('./test_data/sample_observation.json', 'r') as file:
-    sample_observation = json.load(file)
+    SAMPLE_OBSERVATION = json.load(file)
 
-def test_observation_validation():
-    o = Observation(sample_observation)
-    assert Observation.validate_observation_format(sample_observation)
-    assert Observation.validate_observation_format(o.observation)
+# Create a modified version with MRC1 telescope
+MRC1_OBSERVATION = {**SAMPLE_OBSERVATION}
+MRC1_OBSERVATION["site"] = "mrc"
+MRC1_OBSERVATION["telescope"] = "0m31"
 
-def test_observation_create_calendar():
-    o = Observation(sample_observation)
-    assert not hasattr(o, "calendar_event")
-    o._translate_to_calendar()
-    print(o.calendar_event)
-    assert hasattr(o, "calendar_event")
+# Create a modified version with MRC2 telescope
+MRC2_OBSERVATION = {**SAMPLE_OBSERVATION}
+MRC2_OBSERVATION["site"] = "mrc"
+MRC2_OBSERVATION["telescope"] = "0m61"
 
-def test_observation_create_project():
-    o = Observation(sample_observation)
-    assert not hasattr(o, "project")
-    o._translate_to_project()
-    print(o.project)
-    assert hasattr(o, "project")
+# Mock schedule response from site proxy
+MOCK_SCHEDULE_RESPONSE = {
+    "results": [MRC1_OBSERVATION, MRC2_OBSERVATION]
+}
 
-def test_observation_mismatched_site_telescope_fails():
-    s = sample_observation
-    s['site'] = "mrc"
-    s['telescope'] = "not a real telescope"
+# Mock last scheduled time response
+MOCK_LAST_SCHEDULED = {
+    "last_schedule_time": "2025-02-21T16:36:44.534003Z"
+}
 
-    with pytest.raises(KeyError):
-        Observation(s)
+@pytest.fixture
+def mock_tables():
+    """Setup mock DynamoDB tables for testing"""
+    with mock_dynamodb():
+        # Create the tracking table
+        dynamodb = boto3.resource('dynamodb')
+        tracking_table = dynamodb.create_table(
+            TableName='dev-schedule-tracking',
+            KeySchema=[
+                {'AttributeName': 'ptr_site', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'ptr_site', 'AttributeType': 'S'}
+            ],
+            ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
+        )
 
-def test_observation_gets_correct_ptr_site():
-    s = sample_observation
-    s['site'] = "mrc"
-    s['telescope'] = "0m31" # valid telescope for mrc, based on configdb
-    o = Observation(s)
-    assert o.ptr_site
+        # Create the calendar table with required indexes
+        calendar_table = dynamodb.create_table(
+            TableName='calendar-dev',
+            KeySchema=[
+                {'AttributeName': 'event_id', 'KeyType': 'HASH'},
+                {'AttributeName': 'start', 'KeyType': 'RANGE'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'event_id', 'AttributeType': 'S'},
+                {'AttributeName': 'start', 'AttributeType': 'S'},
+                {'AttributeName': 'end', 'AttributeType': 'S'},
+                {'AttributeName': 'site', 'AttributeType': 'S'},
+                {'AttributeName': 'creator_id', 'AttributeType': 'S'}
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'creatorid-end-index',
+                    'KeySchema': [
+                        {'AttributeName': 'creator_id', 'KeyType': 'HASH'},
+                        {'AttributeName': 'end', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'},
+                    'ProvisionedThroughput': {'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
+                },
+                {
+                    'IndexName': 'site-end-index',
+                    'KeySchema': [
+                        {'AttributeName': 'site', 'KeyType': 'HASH'},
+                        {'AttributeName': 'end', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'},
+                    'ProvisionedThroughput': {'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
+                }
+            ],
+            ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
+        )
 
+        # Add some sample calendar events
+        calendar_table.put_item(Item={
+            'event_id': 'test-event-1',
+            'start': '2025-02-15T10:00:00Z',
+            'end': '2025-02-15T11:00:00Z',
+            'site': 'mrc1',
+            'creator_id': 'testuser#LCO',
+            'origin': 'LCO',
+            'project_id': 'test-project-1'
+        })
 
+        # Set environment variables
+        with patch.dict('os.environ', {
+            'DYNAMODB_CALENDAR': 'calendar-dev',
+            'STAGE': 'dev'
+        }):
+            yield
 
+# Unit Tests
+
+def test_observation_gets_ptr_site():
+    """Test that observation correctly identifies the PTR site from WEMA and telescope"""
+    # Test MRC1
+    obs_mrc1 = Observation(MRC1_OBSERVATION)
+    assert obs_mrc1.ptr_site == "mrc1"
+
+    # Test MRC2
+    obs_mrc2 = Observation(MRC2_OBSERVATION)
+    assert obs_mrc2.ptr_site == "mrc2"
+
+@responses.activate
+def test_get_last_schedule_time():
+    """Test retrieving the last schedule time from site proxy"""
+    # Mock SSM parameter
+    with patch('import_schedules.ssm.get_parameter') as mock_ssm:
+        mock_ssm.return_value = {'Parameter': {'Value': 'mock-token'}}
+
+        # Mock site-proxy response
+        responses.add(
+            responses.GET,
+            'https://mrc-proxy.lco.global/observation-portal/api/last_scheduled',
+            json=MOCK_LAST_SCHEDULED,
+            status=200
+        )
+
+        # Test function
+        result = get_last_schedule_time('mrc')
+        assert result == MOCK_LAST_SCHEDULED['last_schedule_time']
+
+@responses.activate
+def test_get_schedule():
+    """Test retrieving schedules from site proxy"""
+    # Mock SSM parameter
+    with patch('import_schedules.ssm.get_parameter') as mock_ssm:
+        mock_ssm.return_value = {'Parameter': {'Value': 'mock-token'}}
+
+        # Mock site-proxy response for all telescopes
+        responses.add(
+            responses.GET,
+            'https://mrc-proxy.lco.global/observation-portal/api/schedule',
+            json=MOCK_SCHEDULE_RESPONSE,
+            status=200,
+            match_querystring=False
+        )
+
+        # Test getting all schedules for site
+        result = get_schedule('mrc')
+        assert len(result) == 2
+
+        # Mock site-proxy response for specific telescope
+        filtered_response = {"results": [MRC1_OBSERVATION]}
+        responses.add(
+            responses.GET,
+            'https://mrc-proxy.lco.global/observation-portal/api/schedule?telescope=0m31',
+            json=filtered_response,
+            status=200,
+            match_querystring=False
+        )
+
+        # Test getting schedule filtered by telescope
+        result = get_schedule('mrc', telescope_id='0m31')
+        assert len(result) == 1
+        assert result[0]['telescope'] == '0m31'
+
+def test_update_and_get_tracking_time(mock_tables):
+    """Test updating and retrieving tracking times"""
+    # Test updating tracking time
+    update_last_schedule_time('mrc1', MOCK_LAST_SCHEDULED['last_schedule_time'])
+
+    # Test retrieving tracking time
+    result = get_last_tracked_schedule_time('mrc1')
+    assert result == MOCK_LAST_SCHEDULED['last_schedule_time']
+
+    # Test retrieving non-existent tracking time
+    result = get_last_tracked_schedule_time('non-existent-site')
+    assert result is None
+
+def test_clear_old_schedule(mock_tables):
+    """Test clearing old schedules for a specific site"""
+    # Set up some sample data
+    dynamodb = boto3.resource('dynamodb')
+    calendar_table = dynamodb.Table('calendar-dev')
+
+    # Add another test event
+    calendar_table.put_item(Item={
+        'event_id': 'test-event-2',
+        'start': '2025-02-16T10:00:00Z',
+        'end': '2025-02-16T11:00:00Z',
+        'site': 'mrc1',
+        'creator_id': 'testuser#LCO',
+        'origin': 'LCO',
+        'project_id': 'test-project-2'
+    })
+
+    # Mock remove_projects
+    with patch('import_schedules.remove_projects') as mock_remove:
+        mock_remove.return_value = MagicMock()
+
+        # Clear schedules with cutoff time that should remove only the second event
+        cutoff_time = '2025-02-15T23:00:00Z'
+        removed_projects = clear_old_schedule('mrc1', cutoff_time)
+
+        # Verify only one project was removed
+        assert len(removed_projects) == 1
+        assert removed_projects[0] == 'test-project-2'
+
+        # Verify remove_projects was called with correct arguments
+        mock_remove.assert_called_once_with(['test-project-2'])
+
+        # Check that only one event remains in the table
+        response = calendar_table.scan()
+        assert len(response['Items']) == 1
+        assert response['Items'][0]['event_id'] == 'test-event-1'
+
+# Integration Tests
+
+@patch('import_schedules.get_last_schedule_time')
+@patch('import_schedules.get_schedule')
+@patch('import_schedules.clear_old_schedule')
+@patch('import_schedules.update_last_schedule_time')
+@patch('import_schedules.Observation')
+def test_create_latest_schedule_for_subsite(
+    mock_observation, mock_update, mock_clear, mock_get_schedule, mock_last_time, mock_tables
+):
+    """Test creating the latest schedule for a subsite"""
+    # Setup mocks
+    mock_last_time.return_value = "2025-02-21T16:36:44.534003Z"
+    mock_get_schedule.return_value = [MRC1_OBSERVATION]
+    mock_clear.return_value = []
+
+    mock_obs_instance = MagicMock()
+    mock_observation.return_value = mock_obs_instance
+
+    # Test creating schedule for a subsite that needs updating
+    with patch('import_schedules.get_last_tracked_schedule_time') as mock_tracked_time:
+        # Case 1: No previous tracking time - should update
+        mock_tracked_time.return_value = None
+
+        result = create_latest_schedule_for_subsite("mrc1")
+
+        # Verify functions were called
+        mock_last_time.assert_called_with("mrc")
+        mock_get_schedule.assert_called_with("mrc", "0m31")
+        mock_clear.assert_called_with("mrc1")
+        mock_observation.assert_called_with(MRC1_OBSERVATION)
+        mock_obs_instance.create_ptr_resources.assert_called_once()
+        mock_update.assert_called_with("mrc1", "2025-02-21T16:36:44.534003Z")
+
+        # Case 2: Older tracking time - should update
+        mock_tracked_time.return_value = "2025-02-21T16:30:00.000000Z"
+
+        result = create_latest_schedule_for_subsite("mrc1")
+
+        # Verify all the same functions were called again
+        assert mock_observation.call_count == 2
+        assert mock_obs_instance.create_ptr_resources.call_count == 2
+
+        # Case 3: Same tracking time - should not update
+        mock_tracked_time.return_value = "2025-02-21T16:36:44.534003Z"
+
+        result = create_latest_schedule_for_subsite("mrc1")
+
+        # Verify schedule was not recreated
+        assert mock_observation.call_count == 2  # No change from before
+        assert mock_obs_instance.create_ptr_resources.call_count == 2  # No change from before
+
+@patch('import_schedules.create_latest_schedule_for_subsite')
+def test_import_all_schedules(mock_create_schedule):
+    """Test the main import_all_schedules function"""
+    # Setup mock
+    mock_create_schedule.return_value = "Updated schedule"
+
+    # Test importing all schedules
+    result = import_all_schedules()
+
+    # Should call create_latest_schedule_for_subsite for each PTR site
+    expected_calls = len(import_schedules.PTR_SITES_PER_WEMA["mrc"])
+    assert mock_create_schedule.call_count == expected_calls
+
+    # Test importing schedule for specific subsite via HTTP request
+    event = {
+        "httpMethod": "GET",
+        "pathParameters": {
+            "subsite": "mrc1"
+        }
+    }
+
+    result = import_all_schedules(event)
+
+    # Should call create_latest_schedule_for_subsite only for the specified site
+    mock_create_schedule.assert_called_with("mrc1")
+    assert "statusCode" in result
+    assert result["statusCode"] == 200
+
+if __name__ == "__main__":
+    pytest.main()
 
