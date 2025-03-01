@@ -194,11 +194,58 @@ All datetimes should be formatted yyyy-MM-ddTHH:mmZ (UTC, 24-hour format)
 
 ## Integration with LCO Observations
 
-This repository also includes a script that runs on a 5 minute interval that imports observations scheduled by
-LCO at Photon Ranch observatories and translates them into a Photon Ranch project and calendar event so that
-they can be easily run at Photon Ranch observatories.
+This repository includes functionality that imports observations scheduled by LCO for Photon Ranch observatories and translates them into Photon Ranch projects and calendar events to be easily run at Photon Ranch observatories.
 
-The routine can also be invoked manually with a GET request to the `/import-schedules` endpoint.
+### Schedule Import Endpoints
 
-The rate at which the script is automatically run can be adjusted in `serverless.yml` under
-`functions.importSchedulesFromLCO`.
+- GET `/import-schedules`
+  - Description: Trigger a manual import of the latest schedules from LCO for all subsites.
+  - Authorization required: No.
+  - Response: 200 with details of updated schedules.
+
+- GET `/import-schedules/{subsite}`
+  - Description: Trigger a manual import for a specific subsite (e.g., 'mrc1').
+  - Authorization required: No.
+  - Path Parameters:
+    - `subsite` (string): The subsite code to update (e.g., 'mrc1', 'mrc2').
+  - Response: 200 with details of the update for the specified subsite.
+
+### Automatic Schedule Synchronization
+
+The system also runs a scheduled task every 5 minutes that:
+
+1. Checks if new schedules are available for each subsite by comparing the last schedule time at the site-proxy with our last tracked update time
+2. Only updates calendar events when necessary to avoid redundant operations
+3. Manages each subsite (telescope) independently for more granular control
+
+### Site and Subsite Terminology
+
+- **WEMA** (or "Site" in LCO terminology): A geographic location with multiple telescopes (e.g., MRC, ECO, ARO)
+- **Subsite** (or "PTR Site"): A specific telescope at a WEMA (e.g., MRC1, MRC2)
+
+The scheduler imports observations for each subsite from their respective WEMAs, creating Photon Ranch projects and calendar events to facilitate observations.
+
+### Configuration
+
+The system can be configured in several ways:
+
+1. **Available Sites**: Sites available for scheduling are configured in `import_schedules.py`:
+
+   ```python
+   # Only query scheduler for observations at these sites
+   SITES_TO_USE_WITH_SCHEDULER = [
+       "mrc",
+       "aro",
+       "eco",
+   ]
+   ```
+
+   To add or remove a site, simply modify this list.
+
+2. **Site-to-Telescope Mapping**: The mapping between WEMAs, telescope IDs, and PTR sites is also configured in `import_schedules.py` through the `SITE_FROM_WEMA_AND_TELESCOPE_ID` dictionary.
+
+3. **Update Frequency**: The automatic update interval can be adjusted in `serverless.yml` under `functions.importSchedulesFromLCO`.
+
+### Schedule Tracking
+
+The system maintains a DynamoDB table to track when schedules were last updated for each subsite. This allows for efficient synchronization by only updating when newer schedules are available.
