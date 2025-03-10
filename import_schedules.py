@@ -27,7 +27,7 @@ ssm = boto3.client('ssm')
 SITES_TO_USE_WITH_SCHEDULER = [
     "mrc",
     "aro",
-    "eco"
+    # "eco"
 ]
 
 # This allows us to identify a site using configdb telescope ids
