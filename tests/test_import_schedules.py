@@ -224,7 +224,7 @@ def test_import_all_schedules(mock_create_schedule):
     result = import_all_schedules()
 
     # Should call create_latest_schedule_for_subsite for each PTR site
-    expected_calls = sum(len(sites) for sites in import_schedules.PTR_SITES_PER_WEMA.values())
+    expected_calls = sum(len(import_schedules.PTR_SITES_PER_WEMA[site]) for site in import_schedules.SITES_TO_USE_WITH_SCHEDULER)
     assert mock_create_schedule.call_count == expected_calls
 
     # Test importing schedule for specific subsite via HTTP request
