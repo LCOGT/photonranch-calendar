@@ -392,8 +392,8 @@ def getSchedulerObservations(event, context):
     start = strip_trailing_z(request_body['start'])
     end = request_body['end']
 
-    # Import the function here to avoid circular imports
-    from import_schedules import get_formatted_observations
+    # Import from scheduler_utils instead of import_schedules
+    from scheduler_utils import get_formatted_observations
 
     observations = get_formatted_observations(site, start, end)
 
