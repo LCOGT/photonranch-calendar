@@ -15,7 +15,7 @@ calendar_table = dynamodb.Table(calendar_table_name)
 def create_response(status_code: int, message):
     """Returns a given status code."""
 
-    return { 
+    return {
         'statusCode': status_code,
         'headers': {
             # Required for CORS support to work
@@ -46,16 +46,22 @@ def get_utc_iso_time():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def strip_trailing_z(input_string):
+    if input_string and input_string[-1] == "Z":
+        return input_string[:-1]
+    return input_string
+
+
 def create_calendar_event(event):
     return calendar_table.put_item(Item=event)
-    
+
 
 def get_event_by_id(eventId, eventStart):
     """Returns details of a requested event from the calendar database."""
 
     print(f'eventId: {eventId}')
     print(f'eventStart: {eventStart}')
-    try: 
+    try:
         response = calendar_table.get_item(
             Key={
                 'event_id': eventId,
@@ -68,11 +74,11 @@ def get_event_by_id(eventId, eventStart):
         print(f"error with get_event_by_id")
         print(e)
     return ''
-      
+
 
 def get_events_during_time(time, site):
     """Gets calendar events at a site that are active during a given time.
-    
+
     Args:
         time (str): UTC datestring (eg. '2022-05-14T17:30:00Z').
         site (str): sitecode (eg. 'saf').
@@ -102,7 +108,7 @@ def get_projects_url(path):
 
     url = f"https://projects.photonranch.org/{stage}/{path}"
     return url
-    
+
 
 def get_project(project_name, created_at):
     """Get project details from the projects backend.
@@ -139,14 +145,14 @@ def delete_calendar_event(event_id, start_time, user_making_request=None, reques
             },
             ConditionExpression=":requesterIsAdmin = :true OR creator_id = :requester_id",
             ExpressionAttributeValues = {
-                ":requester_id": user_making_request, 
+                ":requester_id": user_making_request,
                 ":requesterIsAdmin": requester_is_admin,
                 ":true": True
             }
         )
         return response  # Return the raw response data (typically including `Item` if success)
     except ClientError as e:
-        # Return None to indicate failure 
+        # Return None to indicate failure
         # In the future, handle different error codes as needed here
         print(f"error deleting event: {e}")
         return None

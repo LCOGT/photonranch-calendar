@@ -10,6 +10,7 @@ from utils import get_event_by_id
 from utils import get_events_during_time
 from utils import get_project
 from utils import delete_calendar_event
+from utils import strip_trailing_z
 
 
 #=========================================#
@@ -20,9 +21,9 @@ def addNewEvent(event, context):
     """Endpoint to add a new event (reservation) to the calendar.
 
     Args:
-        event.body.event_id (str): 
+        event.body.event_id (str):
             Unique id generated for each new event (eg. '999xx09b-xxxx-...').
-        event.body.start (str): 
+        event.body.start (str):
             UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
         event.body.site (str):
             sitecode (eg. 'saf').
@@ -59,7 +60,7 @@ def addNewEvent(event, context):
         return create_response(200, message)
 
     # Something else went wrong, return a Bad Request status code.
-    except Exception as e: 
+    except Exception as e:
         print(f"Exception: {e}")
         return create_response(400, json.dumps(e))
 
@@ -71,9 +72,9 @@ def modifyEvent(event, context):
     unless they are an admin.
 
     Args:
-        event.body.event_id (str): 
+        event.body.event_id (str):
             Unique id generated for each new event (eg. '999xx09b-xxxx-...').
-        event.body.start (str): 
+        event.body.start (str):
             UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
         context.requestContext.authorizer.principalID (str):
             Auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx').
@@ -116,14 +117,14 @@ def modifyEvent(event, context):
 
 def addProjectsToEvents(event, context):
     """Endpoint to add project ids to calendar events.
-    
+
     Args:
-        event.body.project_id (str): 
+        event.body.project_id (str):
             Id of the project to add to the event
             (eg. 'Orion Assignment#2022-02-14T17:30:00Z').
         event.body.events (arr):
-            Contains dicts for each calendar event we want to add the 
-            project to. Each dict has keys 'event_id' and 'start', 
+            Contains dicts for each calendar event we want to add the
+            project to. Each dict has keys 'event_id' and 'start',
             which are the partition key and sort key for the event.
 
     Returns:
@@ -156,12 +157,12 @@ def addProjectsToEvents(event, context):
 
 
 def removeProjectFromEvents(event, context):
-    """Endpoint to remove projects from calendar events. 
-    
+    """Endpoint to remove projects from calendar events.
+
     Args:
-        event.body.events (arr): 
-            Contains dicts for each calendar event we want to add the 
-            project to. Each dict has keys 'event_id' and 'start', 
+        event.body.events (arr):
+            Contains dicts for each calendar event we want to add the
+            project to. Each dict has keys 'event_id' and 'start',
             which are the partition key and sort key for the event.
 
     Returns:
@@ -199,7 +200,7 @@ def removeProjectFromEvents(event, context):
         print(f'update response: {update_response}')
 
     return create_response(200, "Success")
-    
+
 
 def deleteEventById(event, context):
     """Endpoint to delete calendar events with an event_id.
@@ -207,7 +208,7 @@ def deleteEventById(event, context):
     Args:
         event.body.event_id (str):
             Unique id for events to delete (eg. '999xx09b-xxxx-...').
-        event.body.start (str): 
+        event.body.start (str):
             UTC datestring of starting time (eg. '2022-05-14T17:30:00Z').
         context.requestContext.authorizer.principalID (str):
             Auth0 user 'sub' token (eg. 'google-oauth2|xxxxxxxxxxxxx').
@@ -241,7 +242,7 @@ def deleteEventById(event, context):
     result = delete_calendar_event(eventId, startTime, userMakingThisRequest, requesterIsAdmin)
     if result is None:
         return create_response(403, "You may only modify your own events.")
-    
+
     message = json.dumps(result, indent=4, cls=DecimalEncoder)
     return create_response(200, message)
 
@@ -261,12 +262,12 @@ def getSiteEventsInDateRange(event, context):
         200 status code with list of matching events objects.
         400 status code if a required key is missing.
 
-    Sample Python request to this endpoint: 
+    Sample Python request to this endpoint:
 
         import requests, json
         url = "https://calendar.photonranch.org/dev/siteevents"
         body = json.dumps({
-            "site": "saf", 
+            "site": "saf",
             "start": "2022-06-01T01:00:00Z",
             "end": "2022-06-02T01:00:00Z",
             "full_project_details": True
@@ -281,7 +282,7 @@ def getSiteEventsInDateRange(event, context):
     required_keys = ['site', 'start', 'end']
     actual_keys = request_body.keys()
     for key in required_keys:
-        if key not in actual_keys:  
+        if key not in actual_keys:
             msg = f"Error: missing required key {key}"
             print(msg)
             return create_response(400, msg)
@@ -298,8 +299,8 @@ def getSiteEventsInDateRange(event, context):
     events = table_response['Items']
 
     if 'full_project_details' in request_body and request_body['full_project_details']:
-        # Get the project details for each event. 
-        for e in events: 
+        # Get the project details for each event.
+        for e in events:
             project_id = e['project_id']
             if project_id != "none":
                 project_name = project_id.split('#')[-2]
@@ -342,10 +343,10 @@ def getUserEventsEndingAfterTime(event, context):
 def getEventAtTime(event, context):
     """Return events that are happening at a given point in time.
 
-    Args: 
+    Args:
         event.body.time (str): UTC datestring (eg. '2022-05-14T17:30:00Z').
         event.body.site (str): Sitecode (eg. 'saf').
-    
+
     Returns:
         200 status code with list of matching event objects.
     """
@@ -358,7 +359,46 @@ def getEventAtTime(event, context):
     site = event_body["site"]
     events = get_events_during_time(time, site)
     return create_response(200, json.dumps(events))
-      
+
+
+def getSchedulerObservations(event, context):
+    """Return scheduled observations for a site in calendar-like format.
+
+    Args:
+        event.body.site (str): Site code (e.g., 'mrc1')
+        event.body.start (str): UTC datestring of start time (eg. '2022-05-14T17:30:00').
+        event.body.end (str): UTC datestring of end time
+
+    Returns:
+        200 status code with list of observations in calendar-like format
+        400 status code if a required key is missing
+        204 status code if no site proxy is available for the site
+    """
+
+    request_body = json.loads(event.get("body", ""))
+    print(request_body)
+
+    # Check that all required keys are present
+    required_keys = ['site', 'start', 'end']
+    actual_keys = request_body.keys()
+    for key in required_keys:
+        if key not in actual_keys:
+            msg = f"Error: missing required key {key}"
+            print(msg)
+            return create_response(400, msg)
+
+    # Get observations from import_schedules
+    site = strip_trailing_z(request_body['site'])
+    start = strip_trailing_z(request_body['start'])
+    end = request_body['end']
+
+    # Import the function here to avoid circular imports
+    from import_schedules import get_formatted_observations
+
+    observations = get_formatted_observations(site, start, end)
+
+    # Return formatted response
+    return create_response(200, json.dumps(observations, cls=DecimalEncoder))
 
 def isUserScheduled(event, context):
     """Check if a user is scheduled for an event at a specific site and time.
@@ -374,7 +414,7 @@ def isUserScheduled(event, context):
     Returns:
         A 200 status code with a list of allowed users for an event.
     """
-   
+
     event_body = json.loads(event.get("body", ""))
     print("event body:")
     print(event_body)
@@ -391,9 +431,9 @@ def isUserScheduled(event, context):
 
 def doesConflictingEventExist(event, context):
     """Checks for existing calendar events at a given site and time.
-    
+
     Calendar events should only let the designated user use the observatory.
-    If there are no reservations, anyone can use it. 
+    If there are no reservations, anyone can use it.
 
     Args:
         event.body.user_id (str):
@@ -426,4 +466,3 @@ def doesConflictingEventExist(event, context):
 
     # Otherwise, report no conflicts (return False)
     return create_response(200, False)
- 
