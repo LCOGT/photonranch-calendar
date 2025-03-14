@@ -10,6 +10,7 @@ from utils import get_event_by_id
 from utils import get_events_during_time
 from utils import get_project
 from utils import delete_calendar_event
+from utils import strip_trailing_z
 
 
 #=========================================#
@@ -365,7 +366,7 @@ def getSchedulerObservations(event, context):
 
     Args:
         event.body.site (str): Site code (e.g., 'mrc1')
-        event.body.start (str): UTC datestring of start time
+        event.body.start (str): UTC datestring of start time (eg. '2022-05-14T17:30:00').
         event.body.end (str): UTC datestring of end time
 
     Returns:
@@ -387,8 +388,8 @@ def getSchedulerObservations(event, context):
             return create_response(400, msg)
 
     # Get observations from import_schedules
-    site = request_body['site']
-    start = request_body['start']
+    site = strip_trailing_z(request_body['site'])
+    start = strip_trailing_z(request_body['start'])
     end = request_body['end']
 
     # Import the function here to avoid circular imports
