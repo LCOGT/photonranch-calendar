@@ -111,6 +111,41 @@ def test_get_schedule():
         assert len(result) == 1
         assert result[0]['telescope'] == '0m31'
 
+@responses.activate
+def test_get_full_schedule():
+    """Test retrieving schedules from site proxy"""
+    # Mock SSM parameter
+    with patch('import_schedules.ssm.get_parameter') as mock_ssm:
+        mock_ssm.return_value = {'Parameter': {'Value': 'mock-token'}}
+
+        # Mock site-proxy response for all telescopes
+        responses.add(
+            responses.GET,
+            'https://mrc-proxy.lco.global/observation-portal/api/schedule',
+            json=MOCK_SCHEDULE_RESPONSE,
+            status=200,
+            match_querystring=False
+        )
+
+        # Test getting all schedules for site
+        result = get_schedule('mrc')
+        assert len(result) == 2
+
+        # Mock site-proxy response for specific telescope
+        filtered_response = {"results": [MRC1_OBSERVATION]}
+        responses.add(
+            responses.GET,
+            'https://mrc-proxy.lco.global/observation-portal/api/schedule?telescope=0m31',
+            json=filtered_response,
+            status=200,
+            match_querystring=False
+        )
+
+        # Test getting schedule filtered by telescope
+        result = get_schedule('mrc', telescope_id='0m31')
+        assert len(result) == 1
+        assert result[0]['telescope'] == '0m31'
+
 def test_update_and_get_tracking_time(mock_tables):
     """Test updating and retrieving tracking times"""
     # Test updating tracking time
@@ -191,7 +226,7 @@ def test_create_latest_schedule_for_subsite(
 
         # Verify functions were called
         mock_last_time.assert_called_with("mrc")
-        mock_get_schedule.assert_called_with("mrc", "0m31")
+        mock_get_schedule.assert_called_with("mrc", "0m31", "PENDING")
         mock_clear.assert_called_with("mrc1")
         mock_observation.assert_called_with(MRC1_OBSERVATION)
         mock_obs_instance.create_ptr_resources.assert_called_once()
@@ -217,8 +252,8 @@ def test_create_latest_schedule_for_subsite(
 
 @responses.activate
 @patch('import_schedules.PTR_SITE_TO_WEMA_TELESCOPE')
-@patch('import_schedules.get_schedule')
-def test_get_formatted_observations(mock_get_schedule, mock_ptr_map):
+@patch('import_schedules.get_full_schedule')
+def test_get_formatted_observations(mock_get_full_schedule, mock_ptr_map):
     """Test the get_formatted_observations function for retrieving calendar-like observations"""
     # Mock the telescope mapping
     mock_ptr_map.__contains__.side_effect = lambda site: site == "mrc1"
@@ -226,7 +261,7 @@ def test_get_formatted_observations(mock_get_schedule, mock_ptr_map):
 
     # Set up mock schedule response
     mock_observations = [MRC1_OBSERVATION]
-    mock_get_schedule.return_value = mock_observations
+    mock_get_full_schedule.return_value = mock_observations
 
     # Test 1: Unknown site should return empty list
     result = get_formatted_observations("unknown-site", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z")
@@ -249,7 +284,16 @@ def test_get_formatted_observations(mock_get_schedule, mock_ptr_map):
     assert "observation_data" in formatted_obs
 
     # Verify the get_schedule function was called with correct parameters
-    mock_get_schedule.assert_called_with("mrc", "0m31", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z")
+    filtered_states = [
+        "PENDING",
+        "IN_PROGRESS",
+        "NOT_ATTEMPTED",
+        "COMPLETED",
+        "CANCELED",
+        "ABORTED",
+        "FAILED",
+    ]
+    mock_get_full_schedule.assert_called_with("mrc", "0m31", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z", filtered_states=filtered_states)
 
 @patch('import_schedules.create_latest_schedule_for_subsite')
 def test_import_all_schedules(mock_create_schedule):
