@@ -518,7 +518,9 @@ def get_formatted_observations(ptr_site, start, end):
 
     try:
         # Get schedule from site proxy
+        print(f'get_schedule args: {wema}, {telescope_id}, {start}, {end}')
         sched = get_schedule(wema, telescope_id, start, end)
+        print(f'returned schedule: {sched}')
 
         # Format observations to match calendar event structure
         formatted_observations = []
