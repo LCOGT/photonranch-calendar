@@ -495,6 +495,57 @@ def create_latest_schedule_for_subsite(ptr_site):
     return f"Updated schedule for {ptr_site} with {len(sched)} observations"
 
 # This is the function that is run on a cron timer
+def get_formatted_observations(ptr_site, start, end):
+    """Get observations for a site formatted in calendar-like structure.
+
+    This function fetches the latest schedule from the site proxy
+    and formats it to match calendar event structure.
+
+    Args:
+        ptr_site (str): PTR site code (e.g., 'mrc1')
+        start (str): Start time in ISO format
+        end (str): End time in ISO format
+
+    Returns:
+        Array of observations formatted like calendar events
+    """
+
+    # Check if site proxy is available for this site
+    if ptr_site not in PTR_SITE_TO_WEMA_TELESCOPE:
+        return []
+
+    wema, telescope_id = PTR_SITE_TO_WEMA_TELESCOPE[ptr_site]
+
+    try:
+        # Get schedule from site proxy
+        sched = get_schedule(wema, telescope_id, start, end)
+
+        # Format observations to match calendar event structure
+        formatted_observations = []
+        for obs in sched:
+            formatted_obs = {
+                "event_id": str(obs["id"]),
+                "start": obs["start"],
+                "end": obs["end"],
+                "creator": obs["submitter"],
+                "creator_id": f'{obs["submitter"]}#LCO',
+                "last_modified": obs["modified"],
+                "reservation_type": "observation",
+                "origin": "LCO",
+                "resourceId": ptr_site,
+                "site": ptr_site,
+                "title": f"{obs['name']} (via LCO)",
+                "observation_type": obs["observation_type"],
+                "observation_data": obs  # Include full observation data
+            }
+
+            formatted_observations.append(formatted_obs)
+
+        return formatted_observations
+    except Exception as e:
+        print(f"Error fetching observations: {e}")
+        return []
+
 def import_all_schedules(event={}, context={}):
     results = {}
 

@@ -16,7 +16,8 @@ from import_schedules import (
     update_last_schedule_time,
     get_last_tracked_schedule_time,
     create_latest_schedule_for_subsite,
-    import_all_schedules
+    import_all_schedules,
+    get_formatted_observations
 )
 
 # Sample observation data for testing
@@ -214,6 +215,42 @@ def test_create_latest_schedule_for_subsite(
         assert mock_observation.call_count == 2  # No change from before
         assert mock_obs_instance.create_ptr_resources.call_count == 2  # No change from before
 
+@responses.activate
+@patch('import_schedules.PTR_SITE_TO_WEMA_TELESCOPE')
+@patch('import_schedules.get_schedule')
+def test_get_formatted_observations(mock_get_schedule, mock_ptr_map):
+    """Test the get_formatted_observations function for retrieving calendar-like observations"""
+    # Mock the telescope mapping
+    mock_ptr_map.__contains__.side_effect = lambda site: site == "mrc1"
+    mock_ptr_map.__getitem__.return_value = ("mrc", "0m31")
+
+    # Set up mock schedule response
+    mock_observations = [MRC1_OBSERVATION]
+    mock_get_schedule.return_value = mock_observations
+
+    # Test 1: Unknown site should return empty list
+    result = get_formatted_observations("unknown-site", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z")
+    assert result == []
+
+    # Test 2: Known site should return formatted observations
+    result = get_formatted_observations("mrc1", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z")
+
+    # Verify results
+    assert len(result) == 1
+    formatted_obs = result[0]
+    assert formatted_obs["event_id"] == str(MRC1_OBSERVATION["id"])
+    assert formatted_obs["start"] == MRC1_OBSERVATION["start"]
+    assert formatted_obs["end"] == MRC1_OBSERVATION["end"]
+    assert formatted_obs["site"] == "mrc1"
+    assert formatted_obs["creator"] == MRC1_OBSERVATION["submitter"]
+    assert formatted_obs["creator_id"] == f'{MRC1_OBSERVATION["submitter"]}#LCO'
+    assert formatted_obs["reservation_type"] == "observation"
+    assert formatted_obs["origin"] == "LCO"
+    assert "observation_data" in formatted_obs
+
+    # Verify the get_schedule function was called with correct parameters
+    mock_get_schedule.assert_called_with("mrc", "0m31", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z")
+
 @patch('import_schedules.create_latest_schedule_for_subsite')
 def test_import_all_schedules(mock_create_schedule):
     """Test the main import_all_schedules function"""
@@ -244,4 +281,3 @@ def test_import_all_schedules(mock_create_schedule):
 
 if __name__ == "__main__":
     pytest.main()
-
