@@ -3,6 +3,17 @@ import json
 import boto3
 from datetime import datetime, timezone, timedelta
 
+# List of all valid observation states
+ALL_OBSERVATION_STATES = [
+    "PENDING",
+    "IN_PROGRESS",
+    "NOT_ATTEMPTED",
+    "COMPLETED",
+    "CANCELED", # this happens when the observation is overwritten by a later schedule
+    "ABORTED",
+    "FAILED",
+]
+
 # Only query scheduler for observations at these sites
 SITES_TO_USE_WITH_SCHEDULER = [
     "mrc",
@@ -48,8 +59,8 @@ def get_site_proxy_header(site):
     )
     return { "Authorization": response['Parameter']['Value'] }
 
-def get_full_schedule(wema, telescope_id=None, start=None, end=None, limit=1000, filtered_states=None):
-    """Get the schedule from the site proxy with optional telescope filter.
+def get_full_schedule(wema, telescope_id=None, start=None, end=None, limit=1000, observation_states=None):
+    """Return a list of scheduled observations for a given PTR site
 
     Args:
         wema (str): The WEMA site code (e.g., "mrc")
@@ -78,11 +89,11 @@ def get_full_schedule(wema, telescope_id=None, start=None, end=None, limit=1000,
     header = get_site_proxy_header(wema)
     response = requests.get(url, headers=header)
 
-    # Filter results by state if requested
+    # Filter results by observation state if requested
     if response.status_code == 200:
         sched = response.json().get("results")
-        if filtered_states is not None:
-            sched = [x for x in sched if x["state"] in filtered_states]
+        if observation_states is not None:
+            sched = [o for o in sched if o["state"] in observation_states]
         return sched
 
     print(f"Error fetching schedule: {response.status_code}")
@@ -108,40 +119,31 @@ def get_formatted_observations(ptr_site, start, end):
 
     wema, telescope_id = PTR_SITE_TO_WEMA_TELESCOPE[ptr_site]
 
-    filtered_states = [
-        "PENDING",
-        "IN_PROGRESS",
-        "NOT_ATTEMPTED",
-        "COMPLETED",
-        "CANCELED", # this happens when the observation is overwritten by a later schedule
-        "ABORTED",
-        "FAILED",
-    ]
-
     try:
         # Get schedule from site proxy
         print(f'get_schedule args: {wema}, {telescope_id}, {start}, {end}')
-        sched = get_full_schedule(wema, telescope_id, start, end, filtered_states=filtered_states)
-        print(f'returned schedule: {sched}')
+        schedule = get_full_schedule(wema, telescope_id, start, end, observation_states=ALL_OBSERVATION_STATES)
+        print(f'returned schedule: {schedule}')
 
         # Format observations to match calendar event structure
         formatted_observations = []
-        for obs in sched:
+        for observation in schedule:
             formatted_obs = {
-                "event_id": str(obs["id"]),
-                "start": obs["start"],
-                "end": obs["end"],
-                "creator": obs["submitter"],
-                "creator_id": f'{obs["submitter"]}#LCO',
-                "last_modified": obs["modified"],
+                "event_id": str(observation["id"]),
+                "start": observation["start"],
+                "end": observation["end"],
+                "creator": observation["submitter"],
+                "creator_id": f'{observation["submitter"]}#LCO',
+                "last_modified": observation["modified"],
                 "reservation_type": "observation",
                 "origin": "LCO",
                 "resourceId": ptr_site,
                 "site": ptr_site,
-                "title": f"{obs['name']} (via LCO)",
-                "observation_type": obs["observation_type"],
-                "observation_state": obs["state"],
-                "observation_data": obs  # Include full observation data
+                "title": f"{observation['name']} (via LCO)",
+                "observation_type": observation["observation_type"],
+                "observation_state": observation["state"],
+                "request_state": observation["request"]["state"],
+                "observation_data": observation  # Include full observation data
             }
 
             formatted_observations.append(formatted_obs)

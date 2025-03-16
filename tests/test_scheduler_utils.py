@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
 from scheduler_utils import (
+    ALL_OBSERVATION_STATES,
     PTR_SITE_TO_WEMA_TELESCOPE,
     get_full_schedule,
     get_formatted_observations
@@ -61,13 +62,4 @@ def test_get_formatted_observations(mock_get_full_schedule, mock_ptr_map):
     assert "observation_data" in formatted_obs
 
     # Verify the get_full_schedule function was called with correct parameters
-    filtered_states = [
-        "PENDING",
-        "IN_PROGRESS",
-        "NOT_ATTEMPTED",
-        "COMPLETED",
-        "CANCELED",
-        "ABORTED",
-        "FAILED",
-    ]
-    mock_get_full_schedule.assert_called_with("mrc", "0m31", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z", filtered_states=filtered_states)
+    mock_get_full_schedule.assert_called_with("mrc", "0m31", "2025-02-20T00:00:00Z", "2025-02-22T00:00:00Z", observation_states=ALL_OBSERVATION_STATES)
