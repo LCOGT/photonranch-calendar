@@ -84,6 +84,8 @@ def get_full_schedule(wema, telescope_id=None, start=None, end=None, limit=1000,
     url_path = f"observation-portal/api/schedule?start={start}&end={end}&limit={limit}"
     if telescope_id:
         url_path += f"&telescope={telescope_id}"
+    for state in ['NOT_ATTEMPTED', 'COMPLETED', 'ABORTED', 'PENDING', 'IN_PROGRESS', 'FAILED']:
+        url_path += f"&state={state}"
 
     url = get_site_proxy_url(wema, url_path)
     header = get_site_proxy_header(wema)
